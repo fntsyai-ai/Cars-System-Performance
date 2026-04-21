@@ -176,7 +176,7 @@ export function ScraperDeals({
         </div>
       </div>
 
-      <div className="card rounded-sm overflow-hidden">
+      <div className="card rounded-sm overflow-x-auto"><div className="min-w-[1040px]">
         <div className="grid grid-cols-[1.7fr_130px_120px_120px_120px_150px_120px_80px] hairline-b bg-ink-900/[0.025]">
           <Th>Deal</Th>
           <Th>Source</Th>
@@ -202,7 +202,7 @@ export function ScraperDeals({
             <DealRow key={deal.id} deal={deal} onPatch={onPatch} onDelete={onDelete} />
           ))
         )}
-      </div>
+      </div></div>
 
       <div className="mt-3 flex items-center gap-4 min-h-[16px]">
         {isPending && <div className="eyebrow !text-clay-500">Syncing…</div>}

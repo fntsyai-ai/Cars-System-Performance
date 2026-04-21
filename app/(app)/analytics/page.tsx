@@ -11,10 +11,10 @@ export default async function AnalyticsPage() {
   const topProvProfit = Math.max(...byProv.map((p) => p.totalProfit), 1);
 
   return (
-    <div className="px-10 py-8 max-w-[1600px]">
-      <header className="mb-12 rise rise-0">
+    <div className="px-4 py-6 md:px-10 md:py-8 max-w-[1600px]">
+      <header className="mb-10 md:mb-12 rise rise-0">
         <div className="eyebrow mb-3">Section III · Analytics</div>
-        <h1 className="font-display text-[56px] leading-none text-ink-900">
+        <h1 className="font-display text-[40px] md:text-[56px] leading-none text-ink-900">
           Patterns<span className="text-clay-500">.</span>
         </h1>
         <p className="mt-3 text-ink-600 text-[14.5px] max-w-[54ch]">
@@ -22,11 +22,11 @@ export default async function AnalyticsPage() {
         </p>
       </header>
 
-      <section className="mb-20 rise rise-1">
+      <section className="mb-16 md:mb-20 rise rise-1">
         <div className="flex items-baseline justify-between mb-5 hairline-b pb-3">
           <div>
             <div className="eyebrow">Breakdown</div>
-            <h2 className="font-display text-[32px] text-ink-900 mt-1">By Make</h2>
+            <h2 className="font-display text-[24px] md:text-[32px] text-ink-900 mt-1">By Make</h2>
           </div>
           <div className="eyebrow">{byMake.length} makes tracked</div>
         </div>
@@ -34,7 +34,7 @@ export default async function AnalyticsPage() {
         {byMake.length === 0 ? (
           <Empty />
         ) : (
-          <div className="card rounded-sm overflow-hidden">
+          <div className="card rounded-sm overflow-x-auto"><div className="min-w-[820px]">
             <HeaderRow columns={["Make", "Found", "Approved", "Bought", "Total Profit", "Avg / Deal", "Share"]} />
             {byMake.map((m, i) => (
               <DataRow
@@ -51,7 +51,7 @@ export default async function AnalyticsPage() {
                 index={i}
               />
             ))}
-          </div>
+          </div></div>
         )}
       </section>
 
@@ -59,7 +59,7 @@ export default async function AnalyticsPage() {
         <div className="flex items-baseline justify-between mb-5 hairline-b pb-3">
           <div>
             <div className="eyebrow">Geography</div>
-            <h2 className="font-display text-[32px] text-ink-900 mt-1">By Province</h2>
+            <h2 className="font-display text-[24px] md:text-[32px] text-ink-900 mt-1">By Province</h2>
           </div>
           <div className="eyebrow">{byProv.length} provinces tracked</div>
         </div>
@@ -67,7 +67,7 @@ export default async function AnalyticsPage() {
         {byProv.length === 0 ? (
           <Empty />
         ) : (
-          <div className="card rounded-sm overflow-hidden">
+          <div className="card rounded-sm overflow-x-auto"><div className="min-w-[720px]">
             <HeaderRow columns={["Province", "Found", "Bought", "Total Profit", "Avg / Deal", "Share"]} gridClass="grid-cols-[1.3fr_1fr_1fr_1.3fr_1fr_1.4fr]" />
             {byProv.map((p, i) => {
               const name = CANADIAN_PROVINCES.find((x) => x.code === p.province)?.name ?? p.province;
@@ -90,7 +90,7 @@ export default async function AnalyticsPage() {
                 />
               );
             })}
-          </div>
+          </div></div>
         )}
       </section>
     </div>

@@ -16,7 +16,49 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
   const pathname = usePathname();
 
   return (
-    <aside className="w-[240px] shrink-0 hairline-r flex flex-col h-screen sticky top-0 bg-paper-100">
+    <>
+      {/* Mobile top bar — hidden on desktop */}
+      <div className="md:hidden sticky top-0 z-30 bg-paper-100 hairline-b">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <div className="relative w-8 h-8 flex items-center justify-center">
+              <div className="absolute inset-0 border border-clay-500/50 rotate-45" />
+              <span className="relative font-display text-clay-500 text-lg italic">A</span>
+            </div>
+            <div className="font-display text-[15px] text-ink-900 leading-none">Alex&rsquo;s Ledger</div>
+          </div>
+          <button
+            onClick={() => signOut()}
+            aria-label="Sign out"
+            className="text-ink-500 hover:text-rust-500 p-2 -mr-2"
+          >
+            <LogOut size={16} strokeWidth={1.6} />
+          </button>
+        </div>
+        <nav className="flex border-t border-ink-900/[0.06]">
+          {nav.map((item) => {
+            const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex-1 flex flex-col items-center gap-1 py-2.5 text-[11px] transition-colors relative",
+                  active ? "text-ink-900 bg-clay-500/[0.07]" : "text-ink-600",
+                )}
+              >
+                {active && <span className="absolute left-0 right-0 top-0 h-[2px] bg-clay-500" />}
+                <Icon size={16} strokeWidth={1.6} className={cn(active ? "text-clay-500" : "text-ink-500")} />
+                <span className="tracking-tight">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Desktop sidebar — hidden on mobile */}
+      <aside className="hidden md:flex w-[240px] shrink-0 hairline-r flex-col h-screen sticky top-0 bg-paper-100">
       <div className="p-6 hairline-b">
         <div className="flex items-center gap-3">
           <div className="relative w-9 h-9 flex items-center justify-center">
@@ -76,5 +118,6 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
         </button>
       </div>
     </aside>
+    </>
   );
 }

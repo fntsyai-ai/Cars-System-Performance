@@ -20,11 +20,11 @@ export default async function DashboardPage({
   ]);
 
   return (
-    <div className="px-10 py-8 max-w-[1600px]">
-      <header className="flex items-end justify-between mb-10 rise rise-0">
+    <div className="px-4 py-6 md:px-10 md:py-8 max-w-[1600px]">
+      <header className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between mb-8 md:mb-10 rise rise-0">
         <div>
           <div className="eyebrow mb-3">Section I · Monthly Ledger</div>
-          <h1 className="font-display text-[56px] leading-none text-ink-900">
+          <h1 className="font-display text-[40px] md:text-[56px] leading-none text-ink-900">
             Dashboard<span className="text-clay-500">.</span>
           </h1>
           <p className="mt-3 text-ink-600 text-[14.5px] max-w-[48ch]">
@@ -34,7 +34,7 @@ export default async function DashboardPage({
         <MonthSelector value={month} />
       </header>
 
-      <section className="card rounded-sm grid grid-cols-6 rise rise-1 overflow-hidden">
+      <section className="card rounded-sm grid grid-cols-2 md:grid-cols-6 rise rise-1 overflow-hidden">
         <KpiCard
           label="Found · Telegram"
           value={formatNumber(summary.telegramFound)}
@@ -76,7 +76,7 @@ export default async function DashboardPage({
         />
       </section>
 
-      <section className="grid grid-cols-[1.2fr_1fr] gap-8 mt-12 rise rise-2">
+      <section className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-8 mt-10 md:mt-12 rise rise-2">
         <div>
           <div className="flex items-baseline justify-between mb-5">
             <div>
@@ -117,7 +117,7 @@ export default async function DashboardPage({
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-8 mt-12 rise rise-3">
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10 md:mt-12 rise rise-3">
         <ChartPanel title="Profit · trailing 12 months" subtitle="monthly realized CAD">
           <ProfitTrendChart data={trend} />
         </ChartPanel>
@@ -144,9 +144,9 @@ function ConversionTile({
   accent?: boolean;
 }) {
   return (
-    <div className="bg-paper-100 p-8">
-      <div className="eyebrow mb-6">{label}</div>
-      <div className={`font-display text-[72px] leading-none tabular ${accent ? "text-clay-500" : "text-ink-900"}`}>
+    <div className="bg-paper-100 p-5 md:p-8">
+      <div className="eyebrow mb-4 md:mb-6">{label}</div>
+      <div className={`font-display text-[44px] md:text-[72px] leading-none tabular ${accent ? "text-clay-500" : "text-ink-900"}`}>
         {value}
       </div>
     </div>
