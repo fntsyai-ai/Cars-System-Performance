@@ -274,7 +274,15 @@ export const CANADIAN_PROVINCES = [
   { code: "YT", name: "Yukon" },
 ] as const;
 
-export type UIStatus = "found" | "approved" | "bought" | "no_deal";
+export type UIStatus =
+  | "found"
+  | "approved"
+  | "bought"
+  | "no_deal"
+  | "dealer_didnt_negotiate"
+  | "already_sold"
+  | "bad_spec"
+  | "other";
 
 export type Stage = UIStatus;
 
@@ -283,6 +291,10 @@ export const STAGE_LABELS: Record<Stage, string> = {
   approved: "Approved",
   bought: "Bought",
   no_deal: "No Deal",
+  dealer_didnt_negotiate: "Dealer Didn’t Negotiate",
+  already_sold: "Already Sold",
+  bad_spec: "Bad Spec",
+  other: "Other",
 };
 
 export const UI_STATUS_LABELS: Record<UIStatus, string> = {
@@ -290,4 +302,19 @@ export const UI_STATUS_LABELS: Record<UIStatus, string> = {
   approved: "Approved",
   bought: "Bought",
   no_deal: "No Deal",
+  dealer_didnt_negotiate: "Dealer Didn’t Negotiate",
+  already_sold: "Already Sold",
+  bad_spec: "Bad Spec",
+  other: "Other",
 };
+
+export function isApprovedStageStatus(status: UIStatus) {
+  return (
+    status === "approved" ||
+    status === "bought" ||
+    status === "dealer_didnt_negotiate" ||
+    status === "already_sold" ||
+    status === "bad_spec" ||
+    status === "other"
+  );
+}

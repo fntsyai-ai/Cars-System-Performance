@@ -19,6 +19,17 @@ type FilterState = {
   status: "" | UIStatus;
 };
 
+const STATUS_OPTIONS: UIStatus[] = [
+  "found",
+  "approved",
+  "bought",
+  "dealer_didnt_negotiate",
+  "already_sold",
+  "bad_spec",
+  "other",
+  "no_deal",
+];
+
 export function ScraperDeals({
   deals: initialDeals,
   selectedDay,
@@ -162,7 +173,7 @@ export function ScraperDeals({
           value={filters.status}
           onChange={(value) => setFilters((prev) => ({ ...prev, status: value as FilterState["status"] }))}
           placeholder="All statuses"
-          options={Object.entries(UI_STATUS_LABELS).map(([value, label]) => ({ value, label }))}
+          options={STATUS_OPTIONS.map((value) => ({ value, label: UI_STATUS_LABELS[value] }))}
         />
         <input
           value={filters.search}
@@ -304,9 +315,9 @@ function QuickAdd({
           onChange={(e) => setStatus(e.target.value as UIStatus)}
           className="select-chevron w-full bg-transparent text-[13px] text-ink-900 focus:outline-none cursor-pointer"
         >
-          {Object.entries(UI_STATUS_LABELS).map(([value, label]) => (
+          {STATUS_OPTIONS.map((value) => (
             <option key={value} value={value}>
-              {label}
+              {UI_STATUS_LABELS[value]}
             </option>
           ))}
         </select>
@@ -351,6 +362,7 @@ function DealRow({
   onDelete: (deal: UnifiedDeal) => void;
 }) {
   const muted = deal.ui_status === "no_deal";
+  const isBought = deal.ui_status === "bought";
   const sourceLabel = deal.listing_id ? "Telegram" : "Manual";
   const displayTitle = deal.listing?.title ?? ([deal.make, deal.model].filter(Boolean).join(" ") || "Untitled deal");
   const displayLocation = deal.province ?? deal.listing?.dealer_city ?? "—";
@@ -359,7 +371,11 @@ function DealRow({
     <div
       className={cn(
         "grid grid-cols-[1.7fr_130px_120px_120px_120px_150px_120px_80px] hairline-b last:border-b-0 transition-colors",
-        muted ? "bg-ink-900/[0.02] opacity-60" : "hover:bg-ink-900/[0.025]",
+        muted
+          ? "bg-ink-900/[0.02] opacity-60"
+          : isBought
+            ? "bg-sage-500/[0.08] ring-1 ring-inset ring-sage-500/[0.18] hover:bg-sage-500/[0.12]"
+            : "hover:bg-ink-900/[0.025]",
       )}
     >
       <Cell>
@@ -367,7 +383,10 @@ function DealRow({
           <input
             defaultValue={deal.make}
             onBlur={(e) => e.target.value !== deal.make && onPatch(deal.id, { make: e.target.value })}
-            className="w-full bg-transparent text-[13px] text-ink-900 focus:outline-none"
+            className={cn(
+              "w-full bg-transparent text-[13px] focus:outline-none",
+              isBought ? "text-sage-700 font-medium" : "text-ink-900",
+            )}
           />
           <input
             defaultValue={deal.model ?? deal.notes ?? ""}
@@ -375,11 +394,14 @@ function DealRow({
               const value = e.target.value.trim();
               if (value !== (deal.model ?? deal.notes ?? "")) onPatch(deal.id, { model: value || null, notes: null });
             }}
-            className="w-full bg-transparent text-[12px] text-ink-700 placeholder:text-ink-500 focus:outline-none"
+            className={cn(
+              "w-full bg-transparent text-[12px] placeholder:text-ink-500 focus:outline-none",
+              isBought ? "text-sage-700/90" : "text-ink-700",
+            )}
             placeholder={displayTitle}
           />
           {deal.listing ? (
-            <div className="font-mono text-[11px] text-ink-500">
+            <div className={cn("font-mono text-[11px]", isBought ? "text-sage-700/80" : "text-ink-500")}>
               {displayTitle}
             </div>
           ) : null}
@@ -387,12 +409,22 @@ function DealRow({
       </Cell>
       <Cell>
         <div className="w-full">
-          <div className={cn("eyebrow", deal.listing_id ? "!text-clay-500" : "text-ink-500")}>{sourceLabel}</div>
+          <div
+            className={cn(
+              "eyebrow",
+              isBought ? "!text-sage-600" : deal.listing_id ? "!text-clay-500" : "text-ink-500",
+            )}
+          >
+            {sourceLabel}
+          </div>
           <input
             type="date"
             defaultValue={deal.deal_date}
             onBlur={(e) => e.target.value !== deal.deal_date && onPatch(deal.id, { deal_date: e.target.value })}
-            className="mt-1 w-full bg-transparent text-[12px] font-mono tabular text-ink-700 focus:outline-none"
+            className={cn(
+              "mt-1 w-full bg-transparent text-[12px] font-mono tabular focus:outline-none",
+              isBought ? "text-sage-700/90" : "text-ink-700",
+            )}
           />
         </div>
       </Cell>
@@ -401,7 +433,10 @@ function DealRow({
           <select
             value={deal.province ?? ""}
             onChange={(e) => onPatch(deal.id, { province: e.target.value || null })}
-            className="select-chevron w-full bg-transparent text-[13px] font-mono text-ink-900 focus:outline-none cursor-pointer"
+            className={cn(
+              "select-chevron w-full bg-transparent text-[13px] font-mono focus:outline-none cursor-pointer",
+              isBought ? "text-sage-700" : "text-ink-900",
+            )}
           >
             <option value="">—</option>
             {CANADIAN_PROVINCES.map((provinceOption) => (
@@ -411,7 +446,7 @@ function DealRow({
             ))}
           </select>
           {!deal.province && deal.listing?.dealer_city ? (
-            <div className="mt-1 text-[11px] text-ink-500">{displayLocation}</div>
+            <div className={cn("mt-1 text-[11px]", isBought ? "text-sage-700/80" : "text-ink-500")}>{displayLocation}</div>
           ) : null}
         </div>
       </Cell>
@@ -419,17 +454,20 @@ function DealRow({
         <select
           value={deal.ui_status}
           onChange={(e) => onPatch(deal.id, { ui_status: e.target.value as UIStatus })}
-          className="select-chevron w-full bg-transparent text-[13px] text-ink-900 focus:outline-none cursor-pointer"
+          className={cn(
+            "select-chevron w-full bg-transparent text-[13px] focus:outline-none cursor-pointer",
+            isBought ? "text-sage-700 font-medium" : "text-ink-900",
+          )}
         >
-          {Object.entries(UI_STATUS_LABELS).map(([value, label]) => (
+          {STATUS_OPTIONS.map((value) => (
             <option key={value} value={value}>
-              {label}
+              {UI_STATUS_LABELS[value]}
             </option>
           ))}
         </select>
       </Cell>
       <Cell align="right">
-        <span className="font-mono text-[13px] tabular text-ink-900">
+        <span className={cn("font-mono text-[13px] tabular", isBought ? "text-sage-700" : "text-ink-900")}>
           {deal.listing?.price != null ? formatCAD(Number(deal.listing.price)) : "—"}
         </span>
       </Cell>
@@ -440,7 +478,10 @@ function DealRow({
               href={deal.listing.url}
               target="_blank"
               rel="noreferrer"
-              className="text-[12px] text-clay-500 transition-colors hover:text-clay-400"
+              className={cn(
+                "text-[12px] transition-colors",
+                isBought ? "text-sage-700 hover:text-sage-600" : "text-clay-500 hover:text-clay-400",
+              )}
             >
               Listing
             </a>
@@ -450,12 +491,15 @@ function DealRow({
               href={deal.listing.mmr_link}
               target="_blank"
               rel="noreferrer"
-              className="text-[12px] text-ink-700 transition-colors hover:text-ink-900"
+              className={cn(
+                "text-[12px] transition-colors",
+                isBought ? "text-sage-700 hover:text-sage-600" : "text-ink-700 hover:text-ink-900",
+              )}
             >
               MMR
             </a>
           ) : (
-            <span className="text-[11px] text-ink-400">MMR pending</span>
+            <span className={cn("text-[11px]", isBought ? "text-sage-700/70" : "text-ink-400")}>MMR pending</span>
           )}
         </div>
       </Cell>
@@ -463,8 +507,14 @@ function DealRow({
         <input
           type="number"
           defaultValue={deal.profit_cad ?? (deal.listing?.profit_margin != null ? Number(deal.listing.profit_margin) : "")}
+          disabled={!isBought}
           onBlur={(e) => onPatch(deal.id, { profit_cad: e.target.value ? Number(e.target.value) : null })}
-          className="w-full bg-transparent text-[13px] font-mono tabular text-right text-ink-900 placeholder:text-ink-500 focus:outline-none"
+          className={cn(
+            "w-full bg-transparent text-[13px] font-mono tabular text-right placeholder:text-ink-500 focus:outline-none",
+            isBought
+              ? "text-sage-700 font-medium"
+              : "cursor-not-allowed text-ink-500 opacity-85",
+          )}
           placeholder={
             deal.listing?.profit_margin != null ? formatCAD(Number(deal.listing.profit_margin), { sign: true }) : "—"
           }
@@ -475,12 +525,15 @@ function DealRow({
           <button
             onClick={() => onDelete(deal)}
             aria-label="Delete deal"
-            className="text-ink-500 transition-colors hover:text-rust-500"
+            className={cn(
+              "transition-colors",
+              isBought ? "text-sage-700/80 hover:text-rust-500" : "text-ink-500 hover:text-rust-500",
+            )}
           >
             <Trash2 size={14} strokeWidth={1.8} />
           </button>
         ) : (
-          <span className="text-[11px] text-ink-400">Synced</span>
+          <span className={cn("text-[11px]", isBought ? "text-sage-700/75" : "text-ink-400")}>Synced</span>
         )}
       </Cell>
     </div>

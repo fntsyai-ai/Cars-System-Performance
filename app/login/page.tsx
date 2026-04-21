@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { signIn } from "./actions";
 import { getCurrentYearInAppTimeZone } from "@/lib/utils";
+import { BrandMark } from "@/components/brand-mark";
 
 export default function LoginPage() {
   const [err, setErr] = useState<string | null>(null);
@@ -35,7 +36,7 @@ export default function LoginPage() {
         </div>
 
         <header className="relative flex items-center gap-3 rise rise-0">
-          <LogoMark />
+          <BrandMark />
           <span className="eyebrow">Alex&rsquo;s Ledger</span>
         </header>
 
@@ -63,7 +64,7 @@ export default function LoginPage() {
       <section className="flex items-center justify-center p-8 lg:p-14">
         <form onSubmit={onSubmit} className="w-full max-w-[400px] rise rise-1">
           <div className="lg:hidden mb-12 flex items-center gap-3">
-            <LogoMark />
+            <BrandMark />
             <span className="eyebrow">Alex&rsquo;s Ledger</span>
           </div>
 
@@ -123,14 +124,5 @@ function Field({
         className="w-full bg-transparent border-0 border-b border-ink-900/15 py-3 text-ink-900 placeholder:text-ink-400 focus:border-clay-500 focus:outline-none transition-colors text-[15px]"
       />
     </label>
-  );
-}
-
-function LogoMark() {
-  return (
-    <div className="relative w-9 h-9 flex items-center justify-center">
-      <div className="absolute inset-0 border border-clay-500/50 rotate-45" />
-      <span className="relative font-display text-clay-500 text-xl italic">A</span>
-    </div>
   );
 }

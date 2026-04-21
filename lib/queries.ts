@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { formatDayParam, formatMonthParam, formatMonthShortLabel, getMonthDateRange, getMonthUtcRange, getYearStartDate, shiftMonth, type DayRef, type MonthRef, type UIStatus } from "@/lib/utils";
+import { APP_TIME_ZONE, formatDayParam, formatMonthParam, formatMonthShortLabel, getMonthDateRange, getMonthUtcRange, getYearStartDate, isApprovedStageStatus, shiftMonth, type DayRef, type MonthRef, type UIStatus } from "@/lib/utils";
 
 export type ManualDeal = {
   id: string;
@@ -50,6 +50,12 @@ type DealWithMetrics = ManualDeal & {
   listing_profit_margin: number | null;
 };
 
+type DashboardBundle = {
+  summary: MonthlySummary;
+  trend: { month: string; label: string; profit: number; bought: number; approved: number; found: number }[];
+  ytd: number;
+};
+
 async function attachListingMetrics(
   supabase: Awaited<ReturnType<typeof createClient>>,
   deals: ManualDeal[],
@@ -79,84 +85,117 @@ async function attachListingMetrics(
 }
 
 function getEffectiveProfit(deal: DealWithMetrics) {
+  if (deal.ui_status !== "bought") return null;
   if (deal.profit_cad != null) return Number(deal.profit_cad);
-  if (deal.ui_status === "bought" && deal.listing_profit_margin != null) return Number(deal.listing_profit_margin);
+  if (deal.listing_profit_margin != null) return Number(deal.listing_profit_margin);
   return null;
 }
 
-export async function getMonthlySummary(month: MonthRef): Promise<MonthlySummary> {
+function getMonthKeyInAppTimeZone(isoString: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date(isoString));
+
+  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
+  const month = parts.find((part) => part.type === "month")?.value ?? "00";
+  return `${year}-${month}`;
+}
+
+async function getDashboardBundle(month: MonthRef): Promise<DashboardBundle> {
   const supabase = await createClient();
-  const { start, end } = getMonthUtcRange(month);
-  const { start: startDate, end: endDate } = getMonthDateRange(month);
-  const monthStr = formatMonthParam(month);
+  const months = Array.from({ length: 12 }, (_, index) => shiftMonth(month, index - 11));
+  const earliestMonth = months[0];
+  const monthStart = getMonthDateRange(earliestMonth).start;
+  const { start: telegramStart } = getMonthUtcRange(earliestMonth);
+  const { end: telegramEnd } = getMonthUtcRange(month);
+  const ytdStart = getYearStartDate(month);
 
-  // Telegram-found (from car_listings) — count rows where telegram_sent = 'sent'
-  const { count: telegramFound } = await supabase
-    .from("car_listings")
-    .select("*", { count: "exact", head: true })
-    .eq("telegram_sent", "sent")
-    .gte("scraped_at", start)
-    .lt("scraped_at", end);
+  const [manualData, telegramData] = await Promise.all([
+    supabase
+      .from("manual_deals")
+      .select("*")
+      .gte("deal_date", monthStart)
+      .lte("deal_date", getMonthDateRange(month).end),
+    supabase
+      .from("car_listings")
+      .select("scraped_at")
+      .eq("telegram_sent", "sent")
+      .gte("scraped_at", telegramStart)
+      .lt("scraped_at", telegramEnd),
+  ]);
 
-  // Manual deals this month
-  const { data: deals } = await supabase
-    .from("manual_deals")
-    .select("*")
-    .gte("deal_date", startDate)
-    .lte("deal_date", endDate);
+  const manualDeals = await attachListingMetrics(supabase, (manualData.data ?? []) as ManualDeal[]);
+  const monthlyTelegramCounts = new Map<string, number>();
+  for (const row of (telegramData.data ?? []) as Array<{ scraped_at: string }>) {
+    const key = getMonthKeyInAppTimeZone(row.scraped_at);
+    monthlyTelegramCounts.set(key, (monthlyTelegramCounts.get(key) ?? 0) + 1);
+  }
 
-  const dealsArr = await attachListingMetrics(supabase, (deals ?? []) as ManualDeal[]);
-  const dealLogFound = dealsArr.length;
-  const approved = dealsArr.filter((d) => d.ui_status === "approved" || d.ui_status === "bought").length;
-  const bought = dealsArr.filter((d) => d.ui_status === "bought").length;
-  const profits = dealsArr.map(getEffectiveProfit).filter((profit): profit is number => profit != null);
-  const totalProfit = profits.reduce((s, p) => s + p, 0);
-  const avgProfit = profits.length ? totalProfit / profits.length : null;
+  const monthlyDeals = new Map<string, DealWithMetrics[]>();
+  for (const deal of manualDeals) {
+    const key = deal.deal_date.slice(0, 7);
+    const existing = monthlyDeals.get(key);
+    if (existing) existing.push(deal);
+    else monthlyDeals.set(key, [deal]);
+  }
 
-  // Treat stages as a pipeline: bought deals have also been found and approved.
-  const foundToApproved = dealLogFound ? (approved / dealLogFound) * 100 : null;
-  const approvedToBought = approved ? (bought / approved) * 100 : null;
+  const trend = months.map((monthRef) => {
+    const key = formatMonthParam(monthRef);
+    const deals = monthlyDeals.get(key) ?? [];
+    const found = deals.length;
+    const approved = deals.filter((deal) => isApprovedStageStatus(deal.ui_status)).length;
+    const bought = deals.filter((deal) => deal.ui_status === "bought").length;
+    const profits = deals.map(getEffectiveProfit).filter((profit): profit is number => profit != null);
+
+    return {
+      month: key,
+      label: formatMonthShortLabel(monthRef),
+      profit: profits.reduce((sum, profit) => sum + profit, 0),
+      bought,
+      approved,
+      found,
+    };
+  });
+
+  const currentKey = formatMonthParam(month);
+  const currentDeals = monthlyDeals.get(currentKey) ?? [];
+  const currentProfits = currentDeals.map(getEffectiveProfit).filter((profit): profit is number => profit != null);
+  const approved = currentDeals.filter((deal) => isApprovedStageStatus(deal.ui_status)).length;
+  const bought = currentDeals.filter((deal) => deal.ui_status === "bought").length;
+  const totalProfit = currentProfits.reduce((sum, profit) => sum + profit, 0);
+  const ytd = manualDeals
+    .filter((deal) => deal.deal_date >= ytdStart && deal.ui_status === "bought")
+    .reduce((sum, deal) => sum + (getEffectiveProfit(deal) ?? 0), 0);
 
   return {
-    month: monthStr,
-    telegramFound: telegramFound ?? 0,
-    dealLogFound,
-    approved,
-    bought,
-    totalProfit,
-    avgProfit,
-    foundToApproved,
-    approvedToBought,
+    summary: {
+      month: currentKey,
+      telegramFound: monthlyTelegramCounts.get(currentKey) ?? 0,
+      dealLogFound: currentDeals.length,
+      approved,
+      bought,
+      totalProfit,
+      avgProfit: currentProfits.length ? totalProfit / currentProfits.length : null,
+      foundToApproved: currentDeals.length ? (approved / currentDeals.length) * 100 : null,
+      approvedToBought: approved ? (bought / approved) * 100 : null,
+    },
+    trend,
+    ytd,
   };
 }
 
+export async function getMonthlySummary(month: MonthRef): Promise<MonthlySummary> {
+  return (await getDashboardBundle(month)).summary;
+}
+
 export async function getLast12MonthsTrend(refDate: MonthRef) {
-  const out: { month: string; label: string; profit: number; bought: number; approved: number; found: number }[] = [];
-  for (let i = 11; i >= 0; i--) {
-    const m = shiftMonth(refDate, -i);
-    const s = await getMonthlySummary(m);
-    out.push({
-      month: s.month,
-      label: formatMonthShortLabel(m),
-      profit: s.totalProfit,
-      bought: s.bought,
-      approved: s.approved,
-      found: s.dealLogFound,
-    });
-  }
-  return out;
+  return (await getDashboardBundle(refDate)).trend;
 }
 
 export async function getYtdProfit(refDate: MonthRef) {
-  const supabase = await createClient();
-  const startIso = getYearStartDate(refDate);
-  const { data } = await supabase
-    .from("manual_deals")
-    .select("*")
-    .gte("deal_date", startIso)
-    .eq("ui_status", "bought");
-  const deals = await attachListingMetrics(supabase, (data ?? []) as ManualDeal[]);
-  return deals.reduce((sum, deal) => sum + (getEffectiveProfit(deal) ?? 0), 0);
+  return (await getDashboardBundle(refDate)).ytd;
 }
 
 export async function getDealsForMonth(month: MonthRef): Promise<ManualDeal[]> {
@@ -212,8 +251,12 @@ export async function getUnifiedDealsForDay(day: DayRef): Promise<UnifiedDeal[]>
   const statusRank: Record<UIStatus, number> = {
     approved: 0,
     bought: 1,
-    found: 2,
-    no_deal: 3,
+    dealer_didnt_negotiate: 2,
+    already_sold: 3,
+    bad_spec: 4,
+    other: 5,
+    found: 6,
+    no_deal: 7,
   };
 
   return manualDeals
@@ -248,7 +291,7 @@ export async function getAnalyticsByMake() {
     const key = d.make || "Unknown";
     const row = byMake.get(key) ?? { found: 0, approved: 0, bought: 0, totalProfit: 0, profits: [] };
     row.found++;
-    if (d.ui_status === "approved" || d.ui_status === "bought") row.approved++;
+    if (isApprovedStageStatus(d.ui_status)) row.approved++;
     if (d.ui_status === "bought") row.bought++;
     const effectiveProfit = getEffectiveProfit(d);
     if (effectiveProfit != null) {

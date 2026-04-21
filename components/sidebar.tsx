@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "@/app/login/actions";
 import { cn } from "@/lib/utils";
 import { LayoutDashboard, TableProperties, BarChart3, LogOut } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 
 const nav = [
   { href: "/", label: "Ledger", icon: LayoutDashboard, numeral: "I" },
@@ -21,10 +22,7 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
       <div className="md:hidden sticky top-0 z-30 bg-paper-100 hairline-b">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2.5">
-            <div className="relative w-8 h-8 flex items-center justify-center">
-              <div className="absolute inset-0 border border-clay-500/50 rotate-45" />
-              <span className="relative font-display text-clay-500 text-lg italic">A</span>
-            </div>
+            <BrandMark size="sm" />
             <div className="font-display text-[15px] text-ink-900 leading-none">Alex&rsquo;s Ledger</div>
           </div>
           <button
@@ -61,10 +59,7 @@ export function Sidebar({ userEmail }: { userEmail: string }) {
       <aside className="hidden md:flex w-[240px] shrink-0 hairline-r flex-col h-screen sticky top-0 bg-paper-100">
       <div className="p-6 hairline-b">
         <div className="flex items-center gap-3">
-          <div className="relative w-9 h-9 flex items-center justify-center">
-            <div className="absolute inset-0 border border-clay-500/50 rotate-45" />
-            <span className="relative font-display text-clay-500 text-xl italic">A</span>
-          </div>
+          <BrandMark />
           <div>
             <div className="font-display text-[18px] text-ink-900 leading-none">Alex&rsquo;s Ledger</div>
             <div className="eyebrow mt-1.5">Deal Terminal · v1</div>
