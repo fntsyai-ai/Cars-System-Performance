@@ -61,8 +61,8 @@ export function ScraperDeals({
         deal.model ?? "",
         deal.notes ?? "",
         deal.province ?? "",
-        deal.listing?.title ?? "",
-        deal.listing?.dealer_city ?? "",
+        deal.title ?? "",
+        deal.dealer_city ?? "",
       ]
         .join(" ")
         .toLowerCase();
@@ -86,7 +86,6 @@ export function ScraperDeals({
       id: tempId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      listing: null,
     };
 
     setDeals((prev) => [tempDeal, ...prev]);
@@ -102,7 +101,7 @@ export function ScraperDeals({
       if (res.deal) {
         setDeals((prev) =>
           prev.map((deal) =>
-            deal.id === tempId ? ({ ...(res.deal as ManualDeal), listing: null } as UnifiedDeal) : deal,
+            deal.id === tempId ? (res.deal as ManualDeal) : deal,
           ),
         );
       }
@@ -254,6 +253,14 @@ function QuickAdd({
       ui_status: status,
       profit_cad: profit ? Number(profit) : null,
       notes: null,
+      title: null,
+      price: null,
+      profit_margin: null,
+      dealer_city: null,
+      url: null,
+      mmr_link: null,
+      scraped_at: null,
+      telegram_sent: null,
     });
 
     setDate(defaultDate);
@@ -364,8 +371,8 @@ function DealRow({
   const muted = deal.ui_status === "no_deal";
   const isBought = deal.ui_status === "bought";
   const sourceLabel = deal.listing_id ? "Telegram" : "Manual";
-  const displayTitle = deal.listing?.title ?? ([deal.make, deal.model].filter(Boolean).join(" ") || "Untitled deal");
-  const displayLocation = deal.province ?? deal.listing?.dealer_city ?? "—";
+  const displayTitle = deal.title ?? ([deal.make, deal.model].filter(Boolean).join(" ") || "Untitled deal");
+  const displayLocation = deal.province ?? deal.dealer_city ?? "—";
 
   return (
     <div
@@ -400,7 +407,7 @@ function DealRow({
             )}
             placeholder={displayTitle}
           />
-          {deal.listing ? (
+          {deal.title ? (
             <div className={cn("font-mono text-[11px]", isBought ? "text-sage-700/80" : "text-ink-500")}>
               {displayTitle}
             </div>
@@ -445,7 +452,7 @@ function DealRow({
               </option>
             ))}
           </select>
-          {!deal.province && deal.listing?.dealer_city ? (
+          {!deal.province && deal.dealer_city ? (
             <div className={cn("mt-1 text-[11px]", isBought ? "text-sage-700/80" : "text-ink-500")}>{displayLocation}</div>
           ) : null}
         </div>
@@ -468,14 +475,14 @@ function DealRow({
       </Cell>
       <Cell align="right">
         <span className={cn("font-mono text-[13px] tabular", isBought ? "text-sage-700" : "text-ink-900")}>
-          {deal.listing?.price != null ? formatCAD(Number(deal.listing.price)) : "—"}
+          {deal.price != null ? formatCAD(Number(deal.price)) : "—"}
         </span>
       </Cell>
       <Cell>
         <div className="flex flex-col items-start gap-1">
-          {deal.listing?.url ? (
+          {deal.url ? (
             <a
-              href={deal.listing.url}
+              href={deal.url}
               target="_blank"
               rel="noreferrer"
               className={cn(
@@ -486,9 +493,9 @@ function DealRow({
               Listing
             </a>
           ) : null}
-          {deal.listing?.mmr_link ? (
+          {deal.mmr_link ? (
             <a
-              href={deal.listing.mmr_link}
+              href={deal.mmr_link}
               target="_blank"
               rel="noreferrer"
               className={cn(
@@ -506,7 +513,7 @@ function DealRow({
       <Cell align="right">
         <input
           type="number"
-          defaultValue={deal.profit_cad ?? (deal.listing?.profit_margin != null ? Number(deal.listing.profit_margin) : "")}
+          defaultValue={deal.profit_cad ?? (deal.profit_margin != null ? Number(deal.profit_margin) : "")}
           disabled={!isBought}
           onBlur={(e) => onPatch(deal.id, { profit_cad: e.target.value ? Number(e.target.value) : null })}
           className={cn(
@@ -516,7 +523,7 @@ function DealRow({
               : "cursor-not-allowed text-ink-500 opacity-85",
           )}
           placeholder={
-            deal.listing?.profit_margin != null ? formatCAD(Number(deal.listing.profit_margin), { sign: true }) : "—"
+            deal.profit_margin != null ? formatCAD(Number(deal.profit_margin), { sign: true }) : "—"
           }
         />
       </Cell>
