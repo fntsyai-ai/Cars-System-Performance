@@ -1,8 +1,16 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { DEALS_TAG } from "@/lib/queries";
 import type { UIStatus } from "@/lib/utils";
+
+function bustDealCaches() {
+  revalidateTag(DEALS_TAG);
+  revalidatePath("/");
+  revalidatePath("/deals");
+  revalidatePath("/analytics");
+}
 
 export async function createDeal(input: {
   listing_id?: number | null;
@@ -26,9 +34,7 @@ export async function createDeal(input: {
     .select()
     .single();
   if (error) return { error: error.message };
-  revalidatePath("/");
-  revalidatePath("/deals");
-  revalidatePath("/analytics");
+  bustDealCaches();
   return { ok: true, deal: data };
 }
 
@@ -51,9 +57,7 @@ export async function updateDeal(id: string, patch: Partial<{
   };
   const { error } = await supabase.from("manual_deals").update(payload).eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/");
-  revalidatePath("/deals");
-  revalidatePath("/analytics");
+  bustDealCaches();
   return { ok: true };
 }
 
@@ -61,9 +65,7 @@ export async function deleteDeal(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("manual_deals").delete().eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/");
-  revalidatePath("/deals");
-  revalidatePath("/analytics");
+  bustDealCaches();
   return { ok: true };
 }
 
@@ -76,7 +78,6 @@ export async function updateDealUiStatus(dealId: string, uiStatus: UIStatus) {
 
   if (error) return { error: error.message };
 
-  revalidatePath("/deals");
-  revalidatePath("/");
+  bustDealCaches();
   return { ok: true };
 }

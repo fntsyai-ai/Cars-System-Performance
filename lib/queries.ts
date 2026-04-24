@@ -1,5 +1,9 @@
-import { createClient } from "@/lib/supabase/server";
-import { APP_TIME_ZONE, formatDayParam, formatMonthParam, formatMonthShortLabel, getMonthDateRange, getMonthUtcRange, getYearStartDate, isApprovedStageStatus, shiftMonth, type DayRef, type MonthRef, type UIStatus } from "@/lib/utils";
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
+import { getAdminClient } from "@/lib/supabase/admin";
+import { formatDayParam, formatMonthParam, formatMonthShortLabel, getMonthDateRange, getYearStartDate, isApprovedStageStatus, shiftMonth, type DayRef, type MonthRef, type UIStatus } from "@/lib/utils";
+
+export const DEALS_TAG = "deals";
 
 export type ManualDeal = {
   id: string;
@@ -17,7 +21,7 @@ export type ManualDeal = {
 };
 
 export type MonthlySummary = {
-  month: string; // ISO month string YYYY-MM
+  month: string;
   telegramFound: number;
   dealLogFound: number;
   approved: number;
@@ -56,10 +60,7 @@ type DashboardBundle = {
   ytd: number;
 };
 
-async function attachListingMetrics(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  deals: ManualDeal[],
-): Promise<DealWithMetrics[]> {
+async function attachListingMetrics(deals: ManualDeal[]): Promise<DealWithMetrics[]> {
   const listingIds = deals
     .map((deal) => deal.listing_id)
     .filter((id): id is number => typeof id === "number");
@@ -68,6 +69,7 @@ async function attachListingMetrics(
     return deals.map((deal) => ({ ...deal, listing_profit_margin: null }));
   }
 
+  const supabase = getAdminClient();
   const { data } = await supabase
     .from("car_listings")
     .select("id,profit_margin")
@@ -91,54 +93,31 @@ function getEffectiveProfit(deal: DealWithMetrics) {
   return null;
 }
 
-function getMonthKeyInAppTimeZone(isoString: string) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: APP_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(new Date(isoString));
-
-  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
-  const month = parts.find((part) => part.type === "month")?.value ?? "00";
-  return `${year}-${month}`;
-}
-
-async function getDashboardBundle(month: MonthRef): Promise<DashboardBundle> {
-  const supabase = await createClient();
+async function computeDashboardBundle(month: MonthRef): Promise<DashboardBundle> {
+  const supabase = getAdminClient();
   const months = Array.from({ length: 12 }, (_, index) => shiftMonth(month, index - 11));
   const earliestMonth = months[0];
   const monthStart = getMonthDateRange(earliestMonth).start;
-  const { start: telegramStart } = getMonthUtcRange(earliestMonth);
-  const { end: telegramEnd } = getMonthUtcRange(month);
   const ytdStart = getYearStartDate(month);
 
-  const [manualData, telegramData] = await Promise.all([
-    supabase
-      .from("manual_deals")
-      .select("*")
-      .gte("deal_date", monthStart)
-      .lte("deal_date", getMonthDateRange(month).end),
-    supabase
-      .from("car_listings")
-      .select("scraped_at")
-      .eq("telegram_sent", "sent")
-      .gte("scraped_at", telegramStart)
-      .lt("scraped_at", telegramEnd),
-  ]);
+  const { data: manualData } = await supabase
+    .from("manual_deals")
+    .select("*")
+    .gte("deal_date", monthStart)
+    .lte("deal_date", getMonthDateRange(month).end);
 
-  const manualDeals = await attachListingMetrics(supabase, (manualData.data ?? []) as ManualDeal[]);
-  const monthlyTelegramCounts = new Map<string, number>();
-  for (const row of (telegramData.data ?? []) as Array<{ scraped_at: string }>) {
-    const key = getMonthKeyInAppTimeZone(row.scraped_at);
-    monthlyTelegramCounts.set(key, (monthlyTelegramCounts.get(key) ?? 0) + 1);
-  }
+  const manualDeals = await attachListingMetrics((manualData ?? []) as ManualDeal[]);
 
   const monthlyDeals = new Map<string, DealWithMetrics[]>();
+  const monthlyTelegramCounts = new Map<string, number>();
   for (const deal of manualDeals) {
     const key = deal.deal_date.slice(0, 7);
     const existing = monthlyDeals.get(key);
     if (existing) existing.push(deal);
     else monthlyDeals.set(key, [deal]);
+    if (deal.listing_id != null) {
+      monthlyTelegramCounts.set(key, (monthlyTelegramCounts.get(key) ?? 0) + 1);
+    }
   }
 
   const trend = months.map((monthRef) => {
@@ -186,6 +165,15 @@ async function getDashboardBundle(month: MonthRef): Promise<DashboardBundle> {
   };
 }
 
+const getCachedDashboardBundle = (month: MonthRef) =>
+  unstable_cache(
+    () => computeDashboardBundle(month),
+    ["dashboard-bundle", formatMonthParam(month)],
+    { tags: [DEALS_TAG], revalidate: 300 },
+  )();
+
+const getDashboardBundle = cache((month: MonthRef) => getCachedDashboardBundle(month));
+
 export async function getMonthlySummary(month: MonthRef): Promise<MonthlySummary> {
   return (await getDashboardBundle(month)).summary;
 }
@@ -199,7 +187,7 @@ export async function getYtdProfit(refDate: MonthRef) {
 }
 
 export async function getDealsForMonth(month: MonthRef): Promise<ManualDeal[]> {
-  const supabase = await createClient();
+  const supabase = getAdminClient();
   const { start, end } = getMonthDateRange(month);
   const { data } = await supabase
     .from("manual_deals")
@@ -211,7 +199,7 @@ export async function getDealsForMonth(month: MonthRef): Promise<ManualDeal[]> {
 }
 
 export async function getDealsForDay(day: DayRef): Promise<ManualDeal[]> {
-  const supabase = await createClient();
+  const supabase = getAdminClient();
   const dayStr = formatDayParam(day);
   const { data } = await supabase
     .from("manual_deals")
@@ -221,9 +209,8 @@ export async function getDealsForDay(day: DayRef): Promise<ManualDeal[]> {
   return (data ?? []) as ManualDeal[];
 }
 
-export async function getUnifiedDealsForDay(day: DayRef): Promise<UnifiedDeal[]> {
-  const supabase = await createClient();
-  const dayStr = formatDayParam(day);
+async function computeUnifiedDealsForDay(dayStr: string): Promise<UnifiedDeal[]> {
+  const supabase = getAdminClient();
   const { data: manualData } = await supabase
     .from("manual_deals")
     .select("*")
@@ -274,8 +261,17 @@ export async function getUnifiedDealsForDay(day: DayRef): Promise<UnifiedDeal[]>
     });
 }
 
+export async function getUnifiedDealsForDay(day: DayRef): Promise<UnifiedDeal[]> {
+  const dayStr = formatDayParam(day);
+  return unstable_cache(
+    () => computeUnifiedDealsForDay(dayStr),
+    ["unified-deals-day", dayStr],
+    { tags: [DEALS_TAG], revalidate: 300 },
+  )();
+}
+
 export async function getAllDeals(): Promise<ManualDeal[]> {
-  const supabase = await createClient();
+  const supabase = getAdminClient();
   const { data } = await supabase
     .from("manual_deals")
     .select("*")
@@ -283,9 +279,8 @@ export async function getAllDeals(): Promise<ManualDeal[]> {
   return (data ?? []) as ManualDeal[];
 }
 
-export async function getAnalyticsByMake() {
-  const supabase = await createClient();
-  const deals = await attachListingMetrics(supabase, await getAllDeals());
+async function computeAnalyticsByMake() {
+  const deals = await attachListingMetrics(await getAllDeals());
   const byMake = new Map<string, { found: number; approved: number; bought: number; totalProfit: number; profits: number[] }>();
   for (const d of deals) {
     const key = d.make || "Unknown";
@@ -310,9 +305,8 @@ export async function getAnalyticsByMake() {
   })).sort((a, b) => b.totalProfit - a.totalProfit);
 }
 
-export async function getAnalyticsByProvince() {
-  const supabase = await createClient();
-  const deals = await attachListingMetrics(supabase, await getAllDeals());
+async function computeAnalyticsByProvince() {
+  const deals = await attachListingMetrics(await getAllDeals());
   const byProv = new Map<string, { found: number; bought: number; totalProfit: number; profits: number[] }>();
   for (const d of deals) {
     const key = d.province || "—";
@@ -334,3 +328,15 @@ export async function getAnalyticsByProvince() {
     avgProfit: r.profits.length ? r.totalProfit / r.profits.length : null,
   })).sort((a, b) => b.totalProfit - a.totalProfit);
 }
+
+export const getAnalyticsByMake = () =>
+  unstable_cache(computeAnalyticsByMake, ["analytics-by-make"], {
+    tags: [DEALS_TAG],
+    revalidate: 300,
+  })();
+
+export const getAnalyticsByProvince = () =>
+  unstable_cache(computeAnalyticsByProvince, ["analytics-by-province"], {
+    tags: [DEALS_TAG],
+    revalidate: 300,
+  })();
