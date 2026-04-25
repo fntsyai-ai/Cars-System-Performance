@@ -5,6 +5,7 @@ export type ManualDeal = {
   id: string;
   listing_id: number | null;
   deal_date: string;
+  vin: string | null;
   make: string;
   model: string | null;
   province: string | null;
@@ -176,7 +177,15 @@ export async function getDealsForDay(day: DayRef): Promise<ManualDeal[]> {
 
 export async function getUnifiedDealsForDay(day: DayRef): Promise<UnifiedDeal[]> {
   const deals = await getDealsForDay(day);
+  return sortUnifiedDeals(deals);
+}
 
+export async function getUnifiedDealsForMonth(month: MonthRef): Promise<UnifiedDeal[]> {
+  const deals = await getDealsForMonth(month);
+  return sortUnifiedDeals(deals);
+}
+
+function sortUnifiedDeals(deals: UnifiedDeal[]) {
   const statusRank: Record<UIStatus, number> = {
     approved: 0,
     bought: 1,
@@ -189,6 +198,8 @@ export async function getUnifiedDealsForDay(day: DayRef): Promise<UnifiedDeal[]>
   };
 
   return deals.sort((a, b) => {
+    const dayDelta = b.deal_date.localeCompare(a.deal_date);
+    if (dayDelta !== 0) return dayDelta;
     const statusDelta = statusRank[a.ui_status] - statusRank[b.ui_status];
     if (statusDelta !== 0) return statusDelta;
     if (a.scraped_at && b.scraped_at) return b.scraped_at.localeCompare(a.scraped_at);

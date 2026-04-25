@@ -7,6 +7,7 @@ import type { UIStatus } from "@/lib/utils";
 export async function createDeal(input: {
   listing_id?: number | null;
   deal_date: string;
+  vin?: string | null;
   make: string;
   model?: string | null;
   province?: string | null;

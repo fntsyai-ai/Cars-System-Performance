@@ -1,18 +1,25 @@
-import { getUnifiedDealsForDay } from "@/lib/queries";
-import { formatDayParam, formatDayLabel, parseDayParam } from "@/lib/utils";
+import { getUnifiedDealsForDay, getUnifiedDealsForMonth } from "@/lib/queries";
+import { formatDayParam, formatDayLabel, formatMonthLabel, formatMonthParam, parseDayParam, parseMonthParam } from "@/lib/utils";
 import { DaySelector } from "@/components/day-selector";
+import { MonthSelector } from "@/components/month-selector";
 import { ScraperDeals } from "@/components/scraper-deals";
+import { DealsViewToggle } from "@/components/deals-view-toggle";
 
 export default async function DealsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ d?: string }>;
+  searchParams: Promise<{ d?: string; m?: string; view?: string }>;
 }) {
   const params = await searchParams;
   const day = parseDayParam(params.d);
-  const deals = await getUnifiedDealsForDay(day);
+  const month = parseMonthParam(params.m ?? params.d?.slice(0, 7));
+  const view = params.view === "month" ? "month" : "day";
+  const deals = view === "month" ? await getUnifiedDealsForMonth(month) : await getUnifiedDealsForDay(day);
   const linkedDeals = deals.filter((deal) => deal.listing_id != null).length;
   const manualOnlyDeals = deals.length - linkedDeals;
+  const monthDefaultDay = formatDayParam(day).startsWith(formatMonthParam(month))
+    ? formatDayParam(day)
+    : `${formatMonthParam(month)}-01`;
 
   return (
     <div className="px-4 py-6 md:px-10 md:py-8 max-w-[1600px]">
@@ -27,16 +34,19 @@ export default async function DealsPage({
           </p>
         </div>
         <div className="flex items-end justify-between md:justify-end gap-6">
+          <div className="flex flex-col items-start gap-3 md:items-end">
+            <DealsViewToggle value={view} day={day} month={month} />
+          </div>
           <div className="text-left md:text-right">
             <div className="eyebrow">Visible</div>
             <div className="font-display text-[36px] md:text-[42px] text-ink-900 tabular leading-none mt-1">
               {deals.length}
             </div>
             <div className="eyebrow mt-2">
-              {formatDayLabel(day)}
+              {view === "month" ? formatMonthLabel(month) : formatDayLabel(day)}
             </div>
           </div>
-          <DaySelector value={day} />
+          {view === "month" ? <MonthSelector value={month} /> : <DaySelector value={day} />}
         </div>
       </header>
 
@@ -48,20 +58,28 @@ export default async function DealsPage({
               Deal Signals<span className="text-clay-500">.</span>
             </h2>
             <p className="mt-3 text-ink-600 text-[14.5px] max-w-[64ch]">
-              Manual additions sit at the top of the same table as scraper and Telegram deals. `No Deal` rows still stay visible, but fall to the bottom.
+              {view === "month"
+                ? "The monthly log keeps the same editing flow as the day view, but shows the full month at once so you can scroll through every deal."
+                : "Manual additions sit at the top of the same table as scraper and Telegram deals. `No Deal` rows still stay visible, but fall to the bottom."}
             </p>
           </div>
           <div className="text-left md:text-right">
-            <div className="eyebrow">Date</div>
+            <div className="eyebrow">{view === "month" ? "Period" : "Date"}</div>
             <div className="font-display text-[20px] md:text-[24px] text-ink-900 leading-none mt-1">
-              {formatDayParam(day)}
+              {view === "month" ? formatMonthParam(month) : formatDayParam(day)}
             </div>
             <div className="eyebrow mt-2">
               {linkedDeals} telegram-linked · {manualOnlyDeals} manual
             </div>
           </div>
         </div>
-        <ScraperDeals key={formatDayParam(day)} deals={deals} selectedDay={formatDayParam(day)} />
+        <ScraperDeals
+          key={view === "month" ? formatMonthParam(month) : formatDayParam(day)}
+          deals={deals}
+          selectedDay={view === "month" ? monthDefaultDay : formatDayParam(day)}
+          showDateColumn={view === "month"}
+          mode={view}
+        />
       </section>
     </div>
   );

@@ -33,9 +33,13 @@ const STATUS_OPTIONS: UIStatus[] = [
 export function ScraperDeals({
   deals: initialDeals,
   selectedDay,
+  showDateColumn = false,
+  mode = "day",
 }: {
   deals: UnifiedDeal[];
   selectedDay: string;
+  showDateColumn?: boolean;
+  mode?: "day" | "month";
 }) {
   const [deals, setDeals] = useState(initialDeals);
   const [filters, setFilters] = useState<FilterState>({ search: "", source: "", status: "" });
@@ -57,12 +61,14 @@ export function ScraperDeals({
       if (!needle) return true;
 
       const haystack = [
+        deal.vin ?? "",
         deal.make,
         deal.model ?? "",
         deal.notes ?? "",
         deal.province ?? "",
         deal.title ?? "",
         deal.dealer_city ?? "",
+        deal.deal_date,
       ]
         .join(" ")
         .toLowerCase();
@@ -77,6 +83,11 @@ export function ScraperDeals({
     const realizedProfit = visibleDeals.reduce((sum, deal) => sum + (Number(deal.profit_cad) || 0), 0);
     return { telegramVisible, manualVisible, realizedProfit };
   }, [visibleDeals]);
+
+  const tableGridClass = showDateColumn
+    ? "grid grid-cols-[120px_340px_130px_170px_120px_120px_120px_150px_120px_80px]"
+    : "grid grid-cols-[340px_130px_170px_120px_120px_120px_150px_120px_80px]";
+  const tableMinWidthClass = showDateColumn ? "min-w-[1490px]" : "min-w-[1370px]";
 
   function onCreate(input: Omit<ManualDeal, "id" | "created_at" | "updated_at">) {
     setErrorMsg(null);
@@ -177,7 +188,7 @@ export function ScraperDeals({
         <input
           value={filters.search}
           onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-          placeholder="Search title, make, model, notes, location…"
+          placeholder="Search VIN, title, make, model, notes, location…"
           className="flex-1 min-w-[240px] bg-transparent hairline-b py-2 px-1 text-[13px] text-ink-900 placeholder:text-ink-500 focus:border-clay-500/60 transition-colors"
         />
         <div className="font-mono tabular text-[12px] text-ink-600">
@@ -186,10 +197,14 @@ export function ScraperDeals({
         </div>
       </div>
 
-      <div className="card rounded-sm overflow-x-auto"><div className="min-w-[1040px]">
-        <div className="grid grid-cols-[1.7fr_130px_120px_120px_120px_150px_120px_80px] hairline-b bg-ink-900/[0.025]">
+      <div className="card rounded-sm overflow-hidden">
+        <div className="overflow-x-auto overscroll-x-contain">
+          <div className={cn("w-max", tableMinWidthClass)}>
+        <div className={cn("hairline-b bg-ink-900/[0.025]", tableGridClass)}>
+          {showDateColumn ? <Th>Date</Th> : null}
           <Th>Deal</Th>
           <Th>Source</Th>
+          <Th>VIN</Th>
           <Th>Province</Th>
           <Th>Status</Th>
           <Th align="right">Price</Th>
@@ -198,21 +213,37 @@ export function ScraperDeals({
           <Th />
         </div>
 
-        <QuickAdd defaultDate={selectedDay || getTodayDateInAppTimeZone()} onAdd={onCreate} />
+        <QuickAdd
+          defaultDate={selectedDay || getTodayDateInAppTimeZone()}
+          onAdd={onCreate}
+          showDateColumn={showDateColumn}
+          gridClass={tableGridClass}
+        />
 
         {visibleDeals.length === 0 ? (
           <div className="p-16 text-center">
             <div className="eyebrow mb-2">No deals</div>
             <div className="text-ink-500 text-[13px]">
-              No linked deals for this day yet. Add a manual one above or switch the date.
+              {mode === "month"
+                ? "No deals landed in this month yet. Add a manual one above or move to another period."
+                : "No linked deals for this day yet. Add a manual one above or switch the date."}
             </div>
           </div>
         ) : (
           visibleDeals.map((deal) => (
-            <DealRow key={deal.id} deal={deal} onPatch={onPatch} onDelete={onDelete} />
+            <DealRow
+              key={deal.id}
+              deal={deal}
+              onPatch={onPatch}
+              onDelete={onDelete}
+              showDateColumn={showDateColumn}
+              gridClass={tableGridClass}
+            />
           ))
         )}
-      </div></div>
+          </div>
+        </div>
+      </div>
 
       <div className="mt-3 flex items-center gap-4 min-h-[16px]">
         {isPending && <div className="eyebrow !text-clay-500">Syncing…</div>}
@@ -225,9 +256,13 @@ export function ScraperDeals({
 function QuickAdd({
   defaultDate,
   onAdd,
+  showDateColumn,
+  gridClass,
 }: {
   defaultDate: string;
   onAdd: (deal: Omit<ManualDeal, "id" | "created_at" | "updated_at">) => void;
+  showDateColumn?: boolean;
+  gridClass: string;
 }) {
   const [date, setDate] = useState(defaultDate);
   const [make, setMake] = useState("");
@@ -246,6 +281,7 @@ function QuickAdd({
     onAdd({
       listing_id: null,
       deal_date: date,
+      vin: null,
       make: make.trim(),
       model: model.trim() || null,
       province: province || null,
@@ -272,7 +308,17 @@ function QuickAdd({
   }
 
   return (
-    <div className="grid grid-cols-[1.7fr_130px_120px_120px_120px_150px_120px_80px] hairline-b bg-clay-500/[0.05]">
+    <div className={cn("hairline-b bg-clay-500/[0.05]", gridClass)}>
+      {showDateColumn ? (
+        <Cell>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full bg-transparent text-[12px] font-mono tabular text-ink-700 focus:outline-none"
+          />
+        </Cell>
+      ) : null}
       <Cell>
         <div className="w-full space-y-2">
           <input
@@ -294,13 +340,20 @@ function QuickAdd({
       <Cell>
         <div className="w-full">
           <div className="eyebrow !text-clay-500">Manual</div>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="mt-1 w-full bg-transparent text-[12px] font-mono tabular text-ink-700 focus:outline-none"
-          />
+          {showDateColumn ? (
+            <div className="mt-1 text-[11px] text-ink-500">Custom date</div>
+          ) : (
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="mt-1 w-full bg-transparent text-[12px] font-mono tabular text-ink-700 focus:outline-none"
+            />
+          )}
         </div>
+      </Cell>
+      <Cell>
+        <span className="font-mono text-[12px] text-ink-400">—</span>
       </Cell>
       <Cell>
         <select
@@ -363,10 +416,14 @@ function DealRow({
   deal,
   onPatch,
   onDelete,
+  showDateColumn,
+  gridClass,
 }: {
   deal: UnifiedDeal;
   onPatch: (id: string, patch: Partial<ManualDeal>) => void;
   onDelete: (deal: UnifiedDeal) => void;
+  showDateColumn?: boolean;
+  gridClass: string;
 }) {
   const muted = deal.ui_status === "no_deal";
   const isBought = deal.ui_status === "bought";
@@ -377,7 +434,8 @@ function DealRow({
   return (
     <div
       className={cn(
-        "grid grid-cols-[1.7fr_130px_120px_120px_120px_150px_120px_80px] hairline-b last:border-b-0 transition-colors",
+        "hairline-b last:border-b-0 transition-colors",
+        gridClass,
         muted
           ? "bg-ink-900/[0.02] opacity-60"
           : isBought
@@ -385,6 +443,19 @@ function DealRow({
             : "hover:bg-ink-900/[0.025]",
       )}
     >
+      {showDateColumn ? (
+        <Cell>
+          <input
+            type="date"
+            defaultValue={deal.deal_date}
+            onBlur={(e) => e.target.value !== deal.deal_date && onPatch(deal.id, { deal_date: e.target.value })}
+            className={cn(
+              "w-full bg-transparent text-[12px] font-mono tabular focus:outline-none",
+              isBought ? "text-sage-700/90" : "text-ink-700",
+            )}
+          />
+        </Cell>
+      ) : null}
       <Cell>
         <div className="w-full space-y-2">
           <input
@@ -433,6 +504,23 @@ function DealRow({
               isBought ? "text-sage-700/90" : "text-ink-700",
             )}
           />
+        </div>
+      </Cell>
+      <Cell>
+        <div className="w-full">
+          <div
+            className={cn(
+              "font-mono text-[11.5px] tabular tracking-[0.08em] break-all",
+              isBought ? "text-sage-700/90" : "text-ink-700",
+            )}
+          >
+            {deal.vin ?? "—"}
+          </div>
+          {deal.listing_id != null ? (
+            <div className={cn("mt-1 text-[11px]", isBought ? "text-sage-700/70" : "text-ink-400")}>
+              Linked VIN
+            </div>
+          ) : null}
         </div>
       </Cell>
       <Cell>
