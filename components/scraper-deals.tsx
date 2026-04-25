@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
-import { Filter, Plus, Trash2 } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
+import { Filter, Plus, StickyNote, Trash2 } from "lucide-react";
 import type { ManualDeal, UnifiedDeal } from "@/lib/queries";
 import { createDeal, deleteDeal, updateDeal } from "@/app/actions";
 import {
@@ -85,9 +86,9 @@ export function ScraperDeals({
   }, [visibleDeals]);
 
   const tableGridClass = showDateColumn
-    ? "grid grid-cols-[120px_340px_130px_170px_120px_120px_120px_150px_120px_80px]"
-    : "grid grid-cols-[340px_130px_170px_120px_120px_120px_150px_120px_80px]";
-  const tableMinWidthClass = showDateColumn ? "min-w-[1490px]" : "min-w-[1370px]";
+    ? "grid grid-cols-[120px_340px_130px_170px_120px_120px_120px_150px_120px_110px]"
+    : "grid grid-cols-[340px_130px_170px_120px_120px_120px_150px_120px_110px]";
+  const tableMinWidthClass = showDateColumn ? "min-w-[1520px]" : "min-w-[1400px]";
 
   function onCreate(input: Omit<ManualDeal, "id" | "created_at" | "updated_at">) {
     setErrorMsg(null);
@@ -464,10 +465,10 @@ function DealRow({
             )}
           />
           <input
-            defaultValue={deal.model ?? deal.notes ?? ""}
+            defaultValue={deal.model ?? ""}
             onBlur={(e) => {
               const value = e.target.value.trim();
-              if (value !== (deal.model ?? deal.notes ?? "")) onPatch(deal.id, { model: value || null, notes: null });
+              if (value !== (deal.model ?? "")) onPatch(deal.id, { model: value || null });
             }}
             className={cn(
               "w-full bg-transparent text-[12px] placeholder:text-ink-500 focus:outline-none",
@@ -613,22 +614,189 @@ function DealRow({
         />
       </Cell>
       <Cell align="center">
-        {deal.listing_id == null ? (
-          <button
-            onClick={() => onDelete(deal)}
-            aria-label="Delete deal"
-            className={cn(
-              "transition-colors",
-              isBought ? "text-sage-700/80 hover:text-rust-500" : "text-ink-500 hover:text-rust-500",
-            )}
-          >
-            <Trash2 size={14} strokeWidth={1.8} />
-          </button>
-        ) : (
-          <span className={cn("text-[11px]", isBought ? "text-sage-700/75" : "text-ink-400")}>Synced</span>
-        )}
+        <div className="flex items-center gap-3">
+          <NoteButton deal={deal} onPatch={onPatch} isBought={isBought} />
+          {deal.listing_id == null ? (
+            <button
+              onClick={() => onDelete(deal)}
+              aria-label="Delete deal"
+              className={cn(
+                "transition-colors",
+                isBought ? "text-sage-700/80 hover:text-rust-500" : "text-ink-500 hover:text-rust-500",
+              )}
+            >
+              <Trash2 size={14} strokeWidth={1.8} />
+            </button>
+          ) : (
+            <span className={cn("text-[11px]", isBought ? "text-sage-700/75" : "text-ink-400")}>Synced</span>
+          )}
+        </div>
       </Cell>
     </div>
+  );
+}
+
+function NoteButton({
+  deal,
+  onPatch,
+  isBought,
+}: {
+  deal: UnifiedDeal;
+  onPatch: (id: string, patch: Partial<ManualDeal>) => void;
+  isBought: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(deal.notes ?? "");
+  const [mounted, setMounted] = useState(false);
+  const [anchorRect, setAnchorRect] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (open) setDraft(deal.notes ?? "");
+  }, [open, deal.notes]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    function update() {
+      const el = triggerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const POPOVER_WIDTH = Math.min(320, window.innerWidth - 16);
+      const MARGIN = 8;
+      let left = rect.right - POPOVER_WIDTH;
+      const maxLeft = window.innerWidth - POPOVER_WIDTH - MARGIN;
+      if (left > maxLeft) left = maxLeft;
+      if (left < MARGIN) left = MARGIN;
+      setAnchorRect({ top: rect.bottom, left });
+    }
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  function commit(next: string | null) {
+    const current = deal.notes ?? null;
+    if (next !== current) onPatch(deal.id, { notes: next });
+  }
+
+  function save() {
+    commit(draft.trim() || null);
+    setOpen(false);
+  }
+
+  function clearNote() {
+    setDraft("");
+    commit(null);
+    setOpen(false);
+  }
+
+  const hasNote = !!deal.notes?.trim();
+  const popoverWidth = mounted ? Math.min(320, typeof window !== "undefined" ? window.innerWidth - 16 : 320) : 320;
+
+  const popover = open && mounted && anchorRect ? createPortal(
+    <div
+      className="fixed inset-0"
+      style={{ zIndex: 2147483000 }}
+      onMouseDown={() => save()}
+    >
+      <div
+        role="dialog"
+        aria-label="Edit note"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute rounded-sm p-3 border"
+        style={{
+          top: anchorRect.top + 8,
+          left: anchorRect.left,
+          width: popoverWidth,
+          background: "var(--cypress-raised, #2a3530)",
+          borderColor: "var(--hairline, rgba(232,223,203,0.12))",
+          boxShadow: "0 16px 40px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.35)",
+        }}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <div className="eyebrow">Note</div>
+          <span className="font-mono text-[10px] text-ink-500">⌘+Enter to save</span>
+        </div>
+        <textarea
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              save();
+            }
+          }}
+          placeholder="Dealer name, what happened, why bad…"
+          rows={5}
+          className="w-full bg-transparent text-[13px] text-ink-900 placeholder:text-ink-500 focus:outline-none resize-none leading-snug"
+        />
+        <div className="mt-2 flex items-center justify-end gap-2">
+          {hasNote ? (
+            <button
+              type="button"
+              onClick={clearNote}
+              className="px-2 py-1 text-[11px] eyebrow text-ink-500 hover:!text-rust-500 transition-colors"
+            >
+              Clear
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={save}
+            className="px-2.5 py-1 text-[11px] eyebrow !text-clay-500 hover:!text-clay-600 border border-clay-500/30 hover:border-clay-500/60 transition-colors rounded-sm"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label={hasNote ? "Edit note" : "Add note"}
+        title={hasNote ? deal.notes ?? "" : "Add note"}
+        className={cn(
+          "relative transition-colors",
+          hasNote
+            ? "!text-clay-500 hover:!text-clay-400"
+            : isBought
+              ? "text-sage-700/70 hover:text-sage-700"
+              : "text-ink-500 hover:text-ink-700",
+        )}
+      >
+        <StickyNote size={14} strokeWidth={1.8} />
+        {hasNote ? (
+          <span
+            aria-hidden
+            className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-clay-500"
+          />
+        ) : null}
+      </button>
+      {popover}
+    </>
   );
 }
 
