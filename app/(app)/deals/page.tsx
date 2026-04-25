@@ -33,20 +33,26 @@ export default async function DealsPage({
             Scraper signals and manual entries now live in one shared intake surface. Add fast, edit inline, and keep the ecosystem in sync.
           </p>
         </div>
-        <div className="flex items-end justify-between md:justify-end gap-6">
-          <div className="flex flex-col items-start gap-3 md:items-end">
-            <DealsViewToggle value={view} day={day} month={month} />
-          </div>
-          <div className="text-left md:text-right">
-            <div className="eyebrow">Visible</div>
-            <div className="font-display text-[36px] md:text-[42px] text-ink-900 tabular leading-none mt-1">
-              {deals.length}
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-end md:gap-6">
+          <div className="flex items-end justify-between gap-6 md:justify-end">
+            <div className="flex flex-col items-start gap-3 md:items-end">
+              <DealsViewToggle value={view} day={day} month={month} />
             </div>
-            <div className="eyebrow mt-2">
-              {view === "month" ? formatMonthLabel(month) : formatDayLabel(day)}
+            <div className="text-left md:text-right">
+              <div className="eyebrow">Visible</div>
+              <div className="font-display text-[36px] md:text-[42px] text-ink-900 tabular leading-none mt-1">
+                {deals.length}
+              </div>
+              <div className="eyebrow mt-2">
+                {view === "month" ? formatMonthLabel(month) : formatDayLabel(day)}
+              </div>
             </div>
           </div>
-          {view === "month" ? <MonthSelector value={month} /> : <DaySelector value={day} />}
+          <div className="-mx-4 px-4 overflow-x-auto md:mx-0 md:px-0 md:overflow-visible">
+            <div className="inline-flex md:flex">
+              {view === "month" ? <MonthSelector value={month} /> : <DaySelector value={day} />}
+            </div>
+          </div>
         </div>
       </header>
 

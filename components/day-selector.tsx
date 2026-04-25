@@ -45,7 +45,7 @@ export function DaySelector({ value }: { value: DayRef }) {
   const [viewYear, setViewYear] = useState(value.year);
   const [viewMonth, setViewMonth] = useState(value.month);
   const [mounted, setMounted] = useState(false);
-  const [anchorRect, setAnchorRect] = useState<{ top: number; right: number } | null>(null);
+  const [anchorRect, setAnchorRect] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => setMounted(true), []);
@@ -63,7 +63,13 @@ export function DaySelector({ value }: { value: DayRef }) {
       const el = triggerRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      setAnchorRect({ top: rect.bottom, right: window.innerWidth - rect.right });
+      const POPOVER_WIDTH = 280;
+      const MARGIN = 8;
+      let left = rect.right - POPOVER_WIDTH;
+      const maxLeft = window.innerWidth - POPOVER_WIDTH - MARGIN;
+      if (left > maxLeft) left = maxLeft;
+      if (left < MARGIN) left = MARGIN;
+      setAnchorRect({ top: rect.bottom, left });
     }
     updatePosition();
     window.addEventListener("resize", updatePosition);
@@ -134,7 +140,7 @@ export function DaySelector({ value }: { value: DayRef }) {
         className="absolute rounded-sm p-3 w-[280px] border"
         style={{
           top: anchorRect.top + 8,
-          right: anchorRect.right,
+          left: anchorRect.left,
           background: "var(--cypress-raised, #2a3530)",
           borderColor: "var(--hairline, rgba(232,223,203,0.12))",
           boxShadow: "0 16px 40px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.35)",
