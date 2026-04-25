@@ -189,12 +189,12 @@ function sortUnifiedDeals(deals: UnifiedDeal[]) {
   const statusRank: Record<UIStatus, number> = {
     approved: 0,
     bought: 1,
-    dealer_didnt_negotiate: 2,
-    already_sold: 3,
-    bad_spec: 4,
-    other: 5,
-    found: 6,
-    no_deal: 7,
+    no_deal: 2,
+    dealer_didnt_negotiate: 3,
+    already_sold: 4,
+    bad_spec: 5,
+    other: 6,
+    found: 7,
   };
 
   return deals.sort((a, b) => {

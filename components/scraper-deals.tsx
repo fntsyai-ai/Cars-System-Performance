@@ -23,11 +23,11 @@ const STATUS_OPTIONS: UIStatus[] = [
   "found",
   "approved",
   "bought",
+  "no_deal",
   "dealer_didnt_negotiate",
   "already_sold",
   "bad_spec",
   "other",
-  "no_deal",
 ];
 
 export function ScraperDeals({
@@ -425,7 +425,6 @@ function DealRow({
   showDateColumn?: boolean;
   gridClass: string;
 }) {
-  const muted = deal.ui_status === "no_deal";
   const isBought = deal.ui_status === "bought";
   const sourceLabel = deal.listing_id ? "Telegram" : "Manual";
   const displayTitle = deal.title ?? ([deal.make, deal.model].filter(Boolean).join(" ") || "Untitled deal");
@@ -436,11 +435,9 @@ function DealRow({
       className={cn(
         "hairline-b last:border-b-0 transition-colors",
         gridClass,
-        muted
-          ? "bg-ink-900/[0.02] opacity-60"
-          : isBought
-            ? "bg-sage-500/[0.08] ring-1 ring-inset ring-sage-500/[0.18] hover:bg-sage-500/[0.12]"
-            : "hover:bg-ink-900/[0.025]",
+        isBought
+          ? "bg-sage-500/[0.08] ring-1 ring-inset ring-sage-500/[0.18] hover:bg-sage-500/[0.12]"
+          : "hover:bg-ink-900/[0.025]",
       )}
     >
       {showDateColumn ? (

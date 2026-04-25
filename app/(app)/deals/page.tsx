@@ -66,7 +66,7 @@ export default async function DealsPage({
             <p className="mt-3 text-ink-600 text-[14.5px] max-w-[64ch]">
               {view === "month"
                 ? "The monthly log keeps the same editing flow as the day view, but shows the full month at once so you can scroll through every deal."
-                : "Manual additions sit at the top of the same table as scraper and Telegram deals. `No Deal` rows still stay visible, but fall to the bottom."}
+                : "Manual additions sit at the top of the same table as scraper and Telegram deals. `Bad Dealer` rows still stay visible, but sit with the approved outcomes."}
             </p>
           </div>
           <div className="text-left md:text-right">

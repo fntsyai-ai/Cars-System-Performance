@@ -290,10 +290,10 @@ export const STAGE_LABELS: Record<Stage, string> = {
   found: "Found",
   approved: "Approved",
   bought: "Bought",
-  no_deal: "No Deal",
+  no_deal: "Bad Dealer",
   dealer_didnt_negotiate: "Dealer Didn’t Negotiate",
   already_sold: "Already Sold",
-  bad_spec: "Bad Spec",
+  bad_spec: "Bad Spec/Damage",
   other: "Other",
 };
 
@@ -301,10 +301,10 @@ export const UI_STATUS_LABELS: Record<UIStatus, string> = {
   found: "Found",
   approved: "Approved",
   bought: "Bought",
-  no_deal: "No Deal",
+  no_deal: "Bad Dealer",
   dealer_didnt_negotiate: "Dealer Didn’t Negotiate",
   already_sold: "Already Sold",
-  bad_spec: "Bad Spec",
+  bad_spec: "Bad Spec/Damage",
   other: "Other",
 };
 
@@ -312,6 +312,7 @@ export function isApprovedStageStatus(status: UIStatus) {
   return (
     status === "approved" ||
     status === "bought" ||
+    status === "no_deal" ||
     status === "dealer_didnt_negotiate" ||
     status === "already_sold" ||
     status === "bad_spec" ||
