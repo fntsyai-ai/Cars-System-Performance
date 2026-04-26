@@ -36,6 +36,7 @@ export async function createDeal(input: {
 export async function updateDeal(id: string, patch: Partial<{
   listing_id: number | null;
   deal_date: string;
+  vin: string | null;
   make: string;
   model: string | null;
   province: string | null;

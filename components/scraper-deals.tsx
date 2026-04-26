@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import { Filter, Plus, StickyNote, Trash2 } from "lucide-react";
+import { Check, Filter, Pencil, Plus, StickyNote, Trash2, X } from "lucide-react";
 import type { ManualDeal, UnifiedDeal } from "@/lib/queries";
 import { createDeal, deleteDeal, updateDeal } from "@/app/actions";
 import {
@@ -86,9 +86,9 @@ export function ScraperDeals({
   }, [visibleDeals]);
 
   const tableGridClass = showDateColumn
-    ? "grid grid-cols-[120px_340px_130px_170px_120px_120px_120px_150px_120px_110px]"
-    : "grid grid-cols-[340px_130px_170px_120px_120px_120px_150px_120px_110px]";
-  const tableMinWidthClass = showDateColumn ? "min-w-[1520px]" : "min-w-[1400px]";
+    ? "grid grid-cols-[120px_340px_130px_210px_120px_120px_120px_150px_120px_110px]"
+    : "grid grid-cols-[340px_130px_210px_120px_120px_120px_150px_120px_110px]";
+  const tableMinWidthClass = showDateColumn ? "min-w-[1560px]" : "min-w-[1440px]";
 
   function onCreate(input: Omit<ManualDeal, "id" | "created_at" | "updated_at">) {
     setErrorMsg(null);
@@ -271,6 +271,7 @@ function QuickAdd({
   const [province, setProvince] = useState("");
   const [status, setStatus] = useState<UIStatus>("found");
   const [profit, setProfit] = useState("");
+  const [vin, setVin] = useState("");
 
   useEffect(() => {
     setDate(defaultDate);
@@ -282,7 +283,7 @@ function QuickAdd({
     onAdd({
       listing_id: null,
       deal_date: date,
-      vin: null,
+      vin: vin.trim().toUpperCase() || null,
       make: make.trim(),
       model: model.trim() || null,
       province: province || null,
@@ -306,6 +307,7 @@ function QuickAdd({
     setProvince("");
     setStatus("found");
     setProfit("");
+    setVin("");
   }
 
   return (
@@ -354,7 +356,16 @@ function QuickAdd({
         </div>
       </Cell>
       <Cell>
-        <span className="font-mono text-[12px] text-ink-400">—</span>
+        <input
+          value={vin}
+          onChange={(e) => setVin(e.target.value)}
+          placeholder="VIN"
+          maxLength={17}
+          spellCheck={false}
+          autoCapitalize="characters"
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          className="w-full bg-transparent font-mono text-[11.5px] tabular tracking-[0.08em] uppercase text-ink-900 placeholder:text-ink-500 focus:outline-none"
+        />
       </Cell>
       <Cell>
         <select
@@ -505,21 +516,11 @@ function DealRow({
         </div>
       </Cell>
       <Cell>
-        <div className="w-full">
-          <div
-            className={cn(
-              "font-mono text-[11.5px] tabular tracking-[0.08em] break-all",
-              isBought ? "text-sage-700/90" : "text-ink-700",
-            )}
-          >
-            {deal.vin ?? "—"}
-          </div>
-          {deal.listing_id != null ? (
-            <div className={cn("mt-1 text-[11px]", isBought ? "text-sage-700/70" : "text-ink-400")}>
-              Linked VIN
-            </div>
-          ) : null}
-        </div>
+        <VinEditor
+          deal={deal}
+          onPatch={onPatch}
+          isBought={isBought}
+        />
       </Cell>
       <Cell>
         <div className="w-full">
@@ -632,6 +633,122 @@ function DealRow({
           )}
         </div>
       </Cell>
+    </div>
+  );
+}
+
+function VinEditor({
+  deal,
+  onPatch,
+  isBought,
+}: {
+  deal: UnifiedDeal;
+  onPatch: (id: string, patch: Partial<ManualDeal>) => void;
+  isBought: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(deal.vin ?? "");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(deal.vin ?? "");
+  }, [editing, deal.vin]);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  function commit() {
+    const value = draft.trim().toUpperCase();
+    const next = value || null;
+    if (next !== (deal.vin ?? null)) onPatch(deal.id, { vin: next });
+    setEditing(false);
+  }
+
+  function cancel() {
+    setDraft(deal.vin ?? "");
+    setEditing(false);
+  }
+
+  const dirty = draft.trim().toUpperCase() !== (deal.vin ?? "");
+
+  return (
+    <div className="w-full">
+      {editing ? (
+        <div className="flex items-center gap-1.5">
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancel();
+              }
+            }}
+            placeholder="VIN"
+            maxLength={17}
+            spellCheck={false}
+            autoCapitalize="characters"
+            className={cn(
+              "min-w-0 flex-1 bg-transparent font-mono text-[11.5px] tabular tracking-[0.08em] uppercase placeholder:text-ink-500 focus:outline-none border-b border-clay-500/40 focus:border-clay-500 pb-0.5",
+              isBought ? "text-sage-700/90" : "text-ink-900",
+            )}
+          />
+          <button
+            type="button"
+            onClick={commit}
+            disabled={!dirty}
+            aria-label="Confirm VIN"
+            className="text-clay-500 hover:text-clay-400 disabled:text-ink-500 disabled:opacity-40 transition-colors"
+          >
+            <Check size={13} strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            onClick={cancel}
+            aria-label="Discard VIN changes"
+            className="text-ink-500 hover:text-rust-500 transition-colors"
+          >
+            <X size={13} strokeWidth={2} />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 group">
+          <div
+            className={cn(
+              "min-w-0 flex-1 font-mono text-[11.5px] tabular tracking-[0.04em] whitespace-nowrap overflow-hidden text-ellipsis",
+              deal.vin ? (isBought ? "text-sage-700/90" : "text-ink-700") : "text-ink-500",
+            )}
+            title={deal.vin ?? undefined}
+          >
+            {deal.vin ?? "—"}
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            aria-label={deal.vin ? "Edit VIN" : "Add VIN"}
+            title={deal.vin ? "Edit VIN" : "Add VIN"}
+            className={cn(
+              "transition-colors opacity-60 group-hover:opacity-100 focus:opacity-100",
+              isBought ? "text-sage-700/80 hover:text-sage-700" : "text-ink-500 hover:text-clay-500",
+            )}
+          >
+            <Pencil size={11} strokeWidth={1.8} />
+          </button>
+        </div>
+      )}
+      {deal.listing_id != null ? (
+        <div className={cn("mt-1 text-[11px]", isBought ? "text-sage-700/70" : "text-ink-400")}>
+          Linked VIN
+        </div>
+      ) : null}
     </div>
   );
 }
