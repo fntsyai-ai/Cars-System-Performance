@@ -13,8 +13,11 @@ export async function createDeal(input: {
   province?: string | null;
   stage: UIStatus;
   ui_status?: UIStatus;
+  price?: number | null;
   profit_cad?: number | null;
   notes?: string | null;
+  url?: string | null;
+  mmr_link?: string | null;
 }) {
   const supabase = await createClient();
   const payload = {
@@ -42,8 +45,11 @@ export async function updateDeal(id: string, patch: Partial<{
   province: string | null;
   stage: UIStatus;
   ui_status: UIStatus;
+  price: number | null;
   profit_cad: number | null;
   notes: string | null;
+  url: string | null;
+  mmr_link: string | null;
 }>) {
   const supabase = await createClient();
   const payload = {

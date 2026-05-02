@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import { Check, Filter, Pencil, Plus, StickyNote, Trash2, X } from "lucide-react";
+import { Check, ExternalLink, Filter, Pencil, Plus, StickyNote, Trash2, X } from "lucide-react";
 import type { ManualDeal, UnifiedDeal } from "@/lib/queries";
 import { createDeal, deleteDeal, updateDeal } from "@/app/actions";
 import {
@@ -30,6 +30,32 @@ const STATUS_OPTIONS: UIStatus[] = [
   "bad_spec",
   "other",
 ];
+
+type LinkDraft = {
+  url: string;
+  mmr_link: string;
+};
+
+function normalizeOptionalUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+function parseOptionalNumber(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getLinkDraft(deal: Pick<ManualDeal, "url" | "mmr_link">): LinkDraft {
+  return {
+    url: deal.url ?? "",
+    mmr_link: deal.mmr_link ?? "",
+  };
+}
 
 export function ScraperDeals({
   deals: initialDeals,
@@ -270,8 +296,10 @@ function QuickAdd({
   const [model, setModel] = useState("");
   const [province, setProvince] = useState("");
   const [status, setStatus] = useState<UIStatus>("found");
+  const [price, setPrice] = useState("");
   const [profit, setProfit] = useState("");
   const [vin, setVin] = useState("");
+  const [links, setLinks] = useState<LinkDraft>({ url: "", mmr_link: "" });
 
   useEffect(() => {
     setDate(defaultDate);
@@ -289,14 +317,14 @@ function QuickAdd({
       province: province || null,
       stage: status,
       ui_status: status,
+      price: parseOptionalNumber(price),
       profit_cad: profit ? Number(profit) : null,
       notes: null,
       title: null,
-      price: null,
       profit_margin: null,
       dealer_city: null,
-      url: null,
-      mmr_link: null,
+      url: normalizeOptionalUrl(links.url),
+      mmr_link: normalizeOptionalUrl(links.mmr_link),
       scraped_at: null,
       telegram_sent: null,
     });
@@ -306,8 +334,10 @@ function QuickAdd({
     setModel("");
     setProvince("");
     setStatus("found");
+    setPrice("");
     setProfit("");
     setVin("");
+    setLinks({ url: "", mmr_link: "" });
   }
 
   return (
@@ -395,10 +425,20 @@ function QuickAdd({
         </select>
       </Cell>
       <Cell align="right">
-        <span className="font-mono text-[13px] text-ink-400">—</span>
+        <input
+          type="number"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder="—"
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          className="w-full bg-transparent text-[13px] font-mono tabular text-right text-ink-900 placeholder:text-ink-500 focus:outline-none"
+        />
       </Cell>
       <Cell>
-        <span className="text-[12px] text-ink-400">Listing / MMR</span>
+        <LinkEditorButton
+          draft={links}
+          onDraftChange={setLinks}
+        />
       </Cell>
       <Cell align="right">
         <input
@@ -561,41 +601,36 @@ function DealRow({
         </select>
       </Cell>
       <Cell align="right">
-        <span className={cn("font-mono text-[13px] tabular", isBought ? "text-sage-700" : "text-ink-900")}>
-          {deal.price != null ? formatCAD(Number(deal.price)) : "—"}
-        </span>
+        {deal.listing_id == null ? (
+          <input
+            type="number"
+            defaultValue={deal.price ?? ""}
+            onBlur={(e) => {
+              const next = parseOptionalNumber(e.target.value);
+              if (next !== deal.price) onPatch(deal.id, { price: next });
+            }}
+            className={cn(
+              "w-full bg-transparent text-[13px] font-mono tabular text-right placeholder:text-ink-500 focus:outline-none",
+              isBought ? "text-sage-700 font-medium" : "text-ink-900",
+            )}
+            placeholder="—"
+          />
+        ) : (
+          <span className={cn("font-mono text-[13px] tabular", isBought ? "text-sage-700" : "text-ink-900")}>
+            {deal.price != null ? formatCAD(Number(deal.price)) : "—"}
+          </span>
+        )}
       </Cell>
       <Cell>
-        <div className="flex flex-col items-start gap-1">
-          {deal.url ? (
-            <a
-              href={deal.url}
-              target="_blank"
-              rel="noreferrer"
-              className={cn(
-                "text-[12px] transition-colors",
-                isBought ? "text-sage-700 hover:text-sage-600" : "text-clay-500 hover:text-clay-400",
-              )}
-            >
-              Listing
-            </a>
-          ) : null}
-          {deal.mmr_link ? (
-            <a
-              href={deal.mmr_link}
-              target="_blank"
-              rel="noreferrer"
-              className={cn(
-                "text-[12px] transition-colors",
-                isBought ? "text-sage-700 hover:text-sage-600" : "text-ink-700 hover:text-ink-900",
-              )}
-            >
-              MMR
-            </a>
-          ) : (
-            <span className={cn("text-[11px]", isBought ? "text-sage-700/70" : "text-ink-400")}>MMR pending</span>
-          )}
-        </div>
+        {deal.listing_id == null ? (
+          <EditableDealLinks
+            deal={deal}
+            onPatch={onPatch}
+            isBought={isBought}
+          />
+        ) : (
+          <ReadOnlyDealLinks deal={deal} isBought={isBought} />
+        )}
       </Cell>
       <Cell align="right">
         <input
@@ -750,6 +785,404 @@ function VinEditor({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function EditableDealLinks({
+  deal,
+  onPatch,
+  isBought,
+}: {
+  deal: UnifiedDeal;
+  onPatch: (id: string, patch: Partial<ManualDeal>) => void;
+  isBought: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<LinkDraft>(getLinkDraft(deal));
+  const [mounted, setMounted] = useState(false);
+  const [anchorRect, setAnchorRect] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!open) setDraft(getLinkDraft(deal));
+  }, [open, deal.url, deal.mmr_link]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    function update() {
+      const el = triggerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const POPOVER_WIDTH = Math.min(360, window.innerWidth - 16);
+      const MARGIN = 8;
+      let left = rect.right - POPOVER_WIDTH;
+      const maxLeft = window.innerWidth - POPOVER_WIDTH - MARGIN;
+      if (left > maxLeft) left = maxLeft;
+      if (left < MARGIN) left = MARGIN;
+      setAnchorRect({ top: rect.bottom, left });
+    }
+
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  function save() {
+    const nextUrl = normalizeOptionalUrl(draft.url);
+    const nextMmrLink = normalizeOptionalUrl(draft.mmr_link);
+    if (nextUrl !== (deal.url ?? null) || nextMmrLink !== (deal.mmr_link ?? null)) {
+      onPatch(deal.id, {
+        url: nextUrl,
+        mmr_link: nextMmrLink,
+      });
+    }
+    setOpen(false);
+  }
+
+  function clearLinks() {
+    setDraft({ url: "", mmr_link: "" });
+    if (deal.url !== null || deal.mmr_link !== null) {
+      onPatch(deal.id, { url: null, mmr_link: null });
+    }
+    setOpen(false);
+  }
+
+  const hasCarGurus = !!deal.url;
+  const hasMmr = !!deal.mmr_link;
+  const hasAnyLinks = hasCarGurus || hasMmr;
+  const popoverWidth = mounted ? Math.min(360, typeof window !== "undefined" ? window.innerWidth - 16 : 360) : 360;
+
+  const popover = open && mounted && anchorRect ? createPortal(
+    <div
+      className="fixed inset-0"
+      style={{ zIndex: 2147483000 }}
+      onMouseDown={() => save()}
+    >
+      <div
+        role="dialog"
+        aria-label="Edit deal links"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute rounded-sm p-3 border"
+        style={{
+          top: anchorRect.top + 8,
+          left: anchorRect.left,
+          width: popoverWidth,
+          background: "var(--cypress-raised, #2a3530)",
+          borderColor: "var(--hairline, rgba(232,223,203,0.12))",
+          boxShadow: "0 16px 40px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.35)",
+        }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="eyebrow">Deal links</div>
+          <span className="font-mono text-[10px] text-ink-500">CarGurus + MMR</span>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <div className="mb-1 text-[11px] uppercase tracking-[0.16em] text-ink-500">CarGurus</div>
+            <input
+              autoFocus
+              value={draft.url}
+              onChange={(e) => setDraft((prev) => ({ ...prev, url: e.target.value }))}
+              placeholder="https://www.cargurus.ca/..."
+              className="w-full bg-transparent text-[13px] text-ink-900 placeholder:text-ink-500 focus:outline-none border-b border-clay-500/30 focus:border-clay-500 pb-1"
+            />
+          </div>
+          <div>
+            <div className="mb-1 text-[11px] uppercase tracking-[0.16em] text-ink-500">MMR</div>
+            <input
+              value={draft.mmr_link}
+              onChange={(e) => setDraft((prev) => ({ ...prev, mmr_link: e.target.value }))}
+              placeholder="https://..."
+              className="w-full bg-transparent text-[13px] text-ink-900 placeholder:text-ink-500 focus:outline-none border-b border-clay-500/30 focus:border-clay-500 pb-1"
+            />
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={clearLinks}
+            className="px-2 py-1 text-[11px] eyebrow text-ink-500 hover:!text-rust-500 transition-colors"
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            className="px-2.5 py-1 text-[11px] eyebrow !text-clay-500 hover:!text-clay-600 border border-clay-500/30 hover:border-clay-500/60 transition-colors rounded-sm"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {hasCarGurus ? (
+          <LinkChip
+            href={deal.url!}
+            label="CarGurus"
+            isBought={isBought}
+            tone="primary"
+          />
+        ) : null}
+        {hasMmr ? (
+          <LinkChip
+            href={deal.mmr_link!}
+            label="MMR"
+            isBought={isBought}
+            tone="neutral"
+          />
+        ) : null}
+        {!hasAnyLinks ? (
+          <span className={cn("text-[11px]", isBought ? "text-sage-700/70" : "text-ink-400")}>Add links</span>
+        ) : null}
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-label={hasAnyLinks ? "Edit deal links" : "Add deal links"}
+          title={hasAnyLinks ? "Edit deal links" : "Add deal links"}
+          className={cn(
+            "transition-colors",
+            isBought ? "text-sage-700/80 hover:text-sage-700" : "text-ink-500 hover:text-clay-500",
+          )}
+        >
+          <Pencil size={11} strokeWidth={1.8} />
+        </button>
+      </div>
+      {popover}
+    </>
+  );
+}
+
+function ReadOnlyDealLinks({
+  deal,
+  isBought,
+}: {
+  deal: UnifiedDeal;
+  isBought: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      {deal.url ? (
+        <LinkChip
+          href={deal.url}
+          label="CarGurus"
+          isBought={isBought}
+          tone="primary"
+        />
+      ) : null}
+      {deal.mmr_link ? (
+        <LinkChip
+          href={deal.mmr_link}
+          label="MMR"
+          isBought={isBought}
+          tone="neutral"
+        />
+      ) : (
+        <span className={cn("text-[11px]", isBought ? "text-sage-700/70" : "text-ink-400")}>MMR pending</span>
+      )}
+    </div>
+  );
+}
+
+function LinkEditorButton({
+  draft,
+  onDraftChange,
+}: {
+  draft: LinkDraft;
+  onDraftChange: (next: LinkDraft) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [anchorRect, setAnchorRect] = useState<{ top: number; left: number } | null>(null);
+  const [localDraft, setLocalDraft] = useState(draft);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!open) setLocalDraft(draft);
+  }, [open, draft]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    function update() {
+      const el = triggerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const POPOVER_WIDTH = Math.min(360, window.innerWidth - 16);
+      const MARGIN = 8;
+      let left = rect.right - POPOVER_WIDTH;
+      const maxLeft = window.innerWidth - POPOVER_WIDTH - MARGIN;
+      if (left > maxLeft) left = maxLeft;
+      if (left < MARGIN) left = MARGIN;
+      setAnchorRect({ top: rect.bottom, left });
+    }
+
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+
+  function save() {
+    onDraftChange(localDraft);
+    setOpen(false);
+  }
+
+  const linkCount = [draft.url, draft.mmr_link].filter((value) => value.trim()).length;
+  const buttonLabel = linkCount === 0 ? "Add links" : linkCount === 1 ? "1 link" : "2 links";
+  const popoverWidth = mounted ? Math.min(360, typeof window !== "undefined" ? window.innerWidth - 16 : 360) : 360;
+
+  const popover = open && mounted && anchorRect ? createPortal(
+    <div
+      className="fixed inset-0"
+      style={{ zIndex: 2147483000 }}
+      onMouseDown={() => save()}
+    >
+      <div
+        role="dialog"
+        aria-label="Add links"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute rounded-sm p-3 border"
+        style={{
+          top: anchorRect.top + 8,
+          left: anchorRect.left,
+          width: popoverWidth,
+          background: "var(--cypress-raised, #2a3530)",
+          borderColor: "var(--hairline, rgba(232,223,203,0.12))",
+          boxShadow: "0 16px 40px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.35)",
+        }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="eyebrow">Links</div>
+          <span className="font-mono text-[10px] text-ink-500">Optional</span>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <div className="mb-1 text-[11px] uppercase tracking-[0.16em] text-ink-500">CarGurus</div>
+            <input
+              autoFocus
+              value={localDraft.url}
+              onChange={(e) => setLocalDraft((prev) => ({ ...prev, url: e.target.value }))}
+              placeholder="https://www.cargurus.ca/..."
+              className="w-full bg-transparent text-[13px] text-ink-900 placeholder:text-ink-500 focus:outline-none border-b border-clay-500/30 focus:border-clay-500 pb-1"
+            />
+          </div>
+          <div>
+            <div className="mb-1 text-[11px] uppercase tracking-[0.16em] text-ink-500">MMR</div>
+            <input
+              value={localDraft.mmr_link}
+              onChange={(e) => setLocalDraft((prev) => ({ ...prev, mmr_link: e.target.value }))}
+              placeholder="https://..."
+              className="w-full bg-transparent text-[13px] text-ink-900 placeholder:text-ink-500 focus:outline-none border-b border-clay-500/30 focus:border-clay-500 pb-1"
+            />
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setLocalDraft({ url: "", mmr_link: "" });
+              onDraftChange({ url: "", mmr_link: "" });
+              setOpen(false);
+            }}
+            className="px-2 py-1 text-[11px] eyebrow text-ink-500 hover:!text-rust-500 transition-colors"
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            className="px-2.5 py-1 text-[11px] eyebrow !text-clay-500 hover:!text-clay-600 border border-clay-500/30 hover:border-clay-500/60 transition-colors rounded-sm"
+          >
+            Use links
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex items-center gap-1.5 text-[12px] text-clay-500 hover:text-clay-400 transition-colors"
+      >
+        <Plus size={11} strokeWidth={1.8} />
+        <span>{buttonLabel}</span>
+      </button>
+      {linkCount > 0 ? (
+        <div className="mt-1 flex flex-wrap items-center gap-1">
+          {draft.url.trim() ? <span className="text-[10px] text-ink-500">CarGurus</span> : null}
+          {draft.mmr_link.trim() ? <span className="text-[10px] text-ink-500">MMR</span> : null}
+        </div>
+      ) : null}
+      {popover}
+    </>
+  );
+}
+
+function LinkChip({
+  href,
+  label,
+  isBought,
+  tone,
+}: {
+  href: string;
+  label: string;
+  isBought: boolean;
+  tone: "primary" | "neutral";
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition-colors",
+        tone === "primary"
+          ? isBought
+            ? "border-sage-500/35 text-sage-700 hover:border-sage-500/55 hover:text-sage-600"
+            : "border-clay-500/30 text-clay-500 hover:border-clay-500/55 hover:text-clay-400"
+          : isBought
+            ? "border-sage-500/22 text-sage-700/90 hover:border-sage-500/45"
+            : "border-ink-900/[0.08] text-ink-700 hover:border-ink-900/[0.16] hover:text-ink-900",
+      )}
+    >
+      <span>{label}</span>
+      <ExternalLink size={10} strokeWidth={1.9} />
+    </a>
   );
 }
 
