@@ -20,6 +20,9 @@ export default async function AnalyticsPage() {
         <p className="mt-3 text-ink-600 text-[14.5px] max-w-[54ch]">
           Where the profit actually comes from — by make and by province.
         </p>
+        <p className="mt-2 font-mono text-[12px] text-ink-500">
+          Bought cars with blank or `CAD 0` profit stay counted as bought, but stay out of profit analytics until paid.
+        </p>
       </header>
 
       <section className="mb-16 md:mb-20 rise rise-1">

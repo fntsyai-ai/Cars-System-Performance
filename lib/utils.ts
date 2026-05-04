@@ -286,6 +286,13 @@ export type UIStatus =
 
 export type Stage = UIStatus;
 
+type DealProfitSnapshot = {
+  ui_status: UIStatus;
+  price?: number | null;
+  profit_cad?: number | null;
+  profit_margin?: number | null;
+};
+
 export const STAGE_LABELS: Record<Stage, string> = {
   found: "Found",
   approved: "Approved",
@@ -318,4 +325,15 @@ export function isApprovedStageStatus(status: UIStatus) {
     status === "bad_spec" ||
     status === "other"
   );
+}
+
+export function isBoughtDealAwaitingPayment(deal: DealProfitSnapshot) {
+  return deal.ui_status === "bought" && (deal.profit_cad == null || deal.profit_cad === 0);
+}
+
+export function getRealizedDealProfit(deal: DealProfitSnapshot) {
+  if (deal.ui_status !== "bought") return null;
+  if (isBoughtDealAwaitingPayment(deal)) return null;
+  if (deal.profit_cad != null) return Number(deal.profit_cad);
+  return null;
 }

@@ -7,6 +7,8 @@ import type { ManualDeal, UnifiedDeal } from "@/lib/queries";
 import { createDeal, deleteDeal, updateDeal } from "@/app/actions";
 import {
   CANADIAN_PROVINCES,
+  getRealizedDealProfit,
+  isBoughtDealAwaitingPayment,
   UI_STATUS_LABELS,
   cn,
   formatCAD,
@@ -107,8 +109,10 @@ export function ScraperDeals({
   const summary = useMemo(() => {
     const telegramVisible = visibleDeals.filter((deal) => deal.listing_id != null).length;
     const manualVisible = visibleDeals.length - telegramVisible;
-    const realizedProfit = visibleDeals.reduce((sum, deal) => sum + (Number(deal.profit_cad) || 0), 0);
-    return { telegramVisible, manualVisible, realizedProfit };
+    const boughtVisible = visibleDeals.filter((deal) => deal.ui_status === "bought").length;
+    const unpaidBoughtVisible = visibleDeals.filter((deal) => isBoughtDealAwaitingPayment(deal)).length;
+    const realizedProfit = visibleDeals.reduce((sum, deal) => sum + (getRealizedDealProfit(deal) ?? 0), 0);
+    return { telegramVisible, manualVisible, boughtVisible, unpaidBoughtVisible, realizedProfit };
   }, [visibleDeals]);
 
   const tableGridClass = showDateColumn
@@ -220,6 +224,9 @@ export function ScraperDeals({
         />
         <div className="font-mono tabular text-[12px] text-ink-600">
           {visibleDeals.length} visible · {summary.telegramVisible} telegram · {summary.manualVisible} manual ·{" "}
+          {summary.boughtVisible} bought
+          {summary.unpaidBoughtVisible ? ` · ${summary.unpaidBoughtVisible} unpaid` : ""}
+          {" · "}
           <span className="text-ink-900">{formatCAD(summary.realizedProfit)}</span>
         </div>
       </div>
@@ -478,6 +485,7 @@ function DealRow({
   gridClass: string;
 }) {
   const isBought = deal.ui_status === "bought";
+  const isAwaitingPayment = isBoughtDealAwaitingPayment(deal);
   const sourceLabel = deal.listing_id ? "Telegram" : "Manual";
   const displayTitle = deal.title ?? ([deal.make, deal.model].filter(Boolean).join(" ") || "Untitled deal");
   const displayLocation = deal.province ?? deal.dealer_city ?? "—";
@@ -601,25 +609,32 @@ function DealRow({
         </select>
       </Cell>
       <Cell align="right">
-        {deal.listing_id == null ? (
-          <input
-            type="number"
-            defaultValue={deal.price ?? ""}
-            onBlur={(e) => {
-              const next = parseOptionalNumber(e.target.value);
-              if (next !== deal.price) onPatch(deal.id, { price: next });
-            }}
-            className={cn(
-              "w-full bg-transparent text-[13px] font-mono tabular text-right placeholder:text-ink-500 focus:outline-none",
-              isBought ? "text-sage-700 font-medium" : "text-ink-900",
-            )}
-            placeholder="—"
-          />
-        ) : (
-          <span className={cn("font-mono text-[13px] tabular", isBought ? "text-sage-700" : "text-ink-900")}>
-            {deal.price != null ? formatCAD(Number(deal.price)) : "—"}
-          </span>
-        )}
+        <div className="w-full">
+          {deal.listing_id == null ? (
+            <input
+              type="number"
+              defaultValue={deal.price ?? ""}
+              onBlur={(e) => {
+                const next = parseOptionalNumber(e.target.value);
+                if (next !== deal.price) onPatch(deal.id, { price: next });
+              }}
+              className={cn(
+                "w-full bg-transparent text-[13px] font-mono tabular text-right placeholder:text-ink-500 focus:outline-none",
+                isBought ? "text-sage-700 font-medium" : "text-ink-900",
+              )}
+              placeholder="—"
+            />
+          ) : (
+            <span className={cn("font-mono text-[13px] tabular", isBought ? "text-sage-700" : "text-ink-900")}>
+              {deal.price != null ? formatCAD(Number(deal.price)) : "—"}
+            </span>
+          )}
+          {isAwaitingPayment ? (
+            <div className={cn("mt-1 text-[10px] font-mono uppercase tracking-[0.12em]", isBought ? "text-clay-600" : "text-clay-500")}>
+              Unpaid
+            </div>
+          ) : null}
+        </div>
       </Cell>
       <Cell>
         {deal.listing_id == null ? (

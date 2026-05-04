@@ -1,5 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
-import { formatDayParam, formatMonthParam, formatMonthShortLabel, getMonthDateRange, getYearStartDate, isApprovedStageStatus, shiftMonth, type DayRef, type MonthRef, type UIStatus } from "@/lib/utils";
+import {
+  formatDayParam,
+  formatMonthParam,
+  formatMonthShortLabel,
+  getMonthDateRange,
+  getRealizedDealProfit,
+  getYearStartDate,
+  isApprovedStageStatus,
+  isBoughtDealAwaitingPayment,
+  shiftMonth,
+  type DayRef,
+  type MonthRef,
+  type UIStatus,
+} from "@/lib/utils";
 
 export type ManualDeal = {
   id: string;
@@ -32,6 +45,8 @@ export type MonthlySummary = {
   dealLogFound: number;
   approved: number;
   bought: number;
+  unpaidBought: number;
+  realizedBought: number;
   totalProfit: number;
   avgProfit: number | null;
   foundToApproved: number | null;
@@ -63,13 +78,6 @@ function normalizeDeal(row: Record<string, unknown>): ManualDeal {
   };
 }
 
-function getEffectiveProfit(deal: ManualDeal) {
-  if (deal.ui_status !== "bought") return null;
-  if (deal.profit_cad != null) return Number(deal.profit_cad);
-  if (deal.profit_margin != null) return Number(deal.profit_margin);
-  return null;
-}
-
 async function getDashboardBundle(month: MonthRef): Promise<DashboardBundle> {
   const supabase = await createClient();
   const months = Array.from({ length: 12 }, (_, index) => shiftMonth(month, index - 11));
@@ -99,7 +107,7 @@ async function getDashboardBundle(month: MonthRef): Promise<DashboardBundle> {
     const found = deals.length;
     const approved = deals.filter((deal) => isApprovedStageStatus(deal.ui_status)).length;
     const bought = deals.filter((deal) => deal.ui_status === "bought").length;
-    const profits = deals.map(getEffectiveProfit).filter((profit): profit is number => profit != null);
+    const profits = deals.map(getRealizedDealProfit).filter((profit): profit is number => profit != null);
 
     return {
       month: key,
@@ -113,13 +121,15 @@ async function getDashboardBundle(month: MonthRef): Promise<DashboardBundle> {
 
   const currentKey = formatMonthParam(month);
   const currentDeals = monthlyDeals.get(currentKey) ?? [];
-  const currentProfits = currentDeals.map(getEffectiveProfit).filter((profit): profit is number => profit != null);
+  const currentProfits = currentDeals.map(getRealizedDealProfit).filter((profit): profit is number => profit != null);
   const approved = currentDeals.filter((deal) => isApprovedStageStatus(deal.ui_status)).length;
-  const bought = currentDeals.filter((deal) => deal.ui_status === "bought").length;
+  const boughtDeals = currentDeals.filter((deal) => deal.ui_status === "bought");
+  const bought = boughtDeals.length;
+  const unpaidBought = boughtDeals.filter(isBoughtDealAwaitingPayment).length;
   const totalProfit = currentProfits.reduce((sum, profit) => sum + profit, 0);
   const ytd = manualDeals
     .filter((deal) => deal.deal_date >= ytdStart && deal.ui_status === "bought")
-    .reduce((sum, deal) => sum + (getEffectiveProfit(deal) ?? 0), 0);
+    .reduce((sum, deal) => sum + (getRealizedDealProfit(deal) ?? 0), 0);
 
   return {
     summary: {
@@ -130,6 +140,8 @@ async function getDashboardBundle(month: MonthRef): Promise<DashboardBundle> {
       dealLogFound: currentDeals.length,
       approved,
       bought,
+      unpaidBought,
+      realizedBought: currentProfits.length,
       totalProfit,
       avgProfit: currentProfits.length ? totalProfit / currentProfits.length : null,
       foundToApproved: currentDeals.length ? (approved / currentDeals.length) * 100 : null,
@@ -225,7 +237,7 @@ export async function getAnalyticsByMake() {
     row.found++;
     if (isApprovedStageStatus(d.ui_status)) row.approved++;
     if (d.ui_status === "bought") row.bought++;
-    const effectiveProfit = getEffectiveProfit(d);
+    const effectiveProfit = getRealizedDealProfit(d);
     if (effectiveProfit != null) {
       row.totalProfit += effectiveProfit;
       row.profits.push(effectiveProfit);
@@ -250,7 +262,7 @@ export async function getAnalyticsByProvince() {
     const row = byProv.get(key) ?? { found: 0, bought: 0, totalProfit: 0, profits: [] };
     row.found++;
     if (d.ui_status === "bought") row.bought++;
-    const effectiveProfit = getEffectiveProfit(d);
+    const effectiveProfit = getRealizedDealProfit(d);
     if (effectiveProfit != null) {
       row.totalProfit += effectiveProfit;
       row.profits.push(effectiveProfit);

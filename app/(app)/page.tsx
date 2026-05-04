@@ -64,7 +64,7 @@ export default async function DashboardPage({
         <KpiCard
           label="Avg · per deal"
           value={summary.avgProfit != null ? formatCAD(summary.avgProfit) : "—"}
-          sub={summary.bought ? `${summary.bought} deals` : "no sales yet"}
+          sub={summary.realizedBought ? `${summary.realizedBought} paid deals` : "no paid deals yet"}
           numeral="05"
         />
         <KpiCard
@@ -75,6 +75,11 @@ export default async function DashboardPage({
           accent="clay"
         />
       </section>
+
+      <div className="mt-4 font-mono text-[12px] text-ink-500 rise rise-2">
+        Bought cars with profit left blank or set to `CAD 0` stay counted as bought. Profit analytics exclude them until they are paid.
+        {summary.unpaidBought ? ` ${summary.unpaidBought} awaiting payment this month.` : ""}
+      </div>
 
       <section className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-8 mt-10 md:mt-12 rise rise-2">
         <div>
