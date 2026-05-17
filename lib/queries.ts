@@ -8,6 +8,7 @@ import {
   getYearStartDate,
   isApprovedStageStatus,
   isBoughtDealAwaitingPayment,
+  normalizeUIStatus,
   shiftMonth,
   type DayRef,
   type MonthRef,
@@ -70,8 +71,12 @@ function toNumber(value: number | string | null | undefined): number | null {
 }
 
 function normalizeDeal(row: Record<string, unknown>): ManualDeal {
+  const uiStatus = normalizeUIStatus(typeof row.ui_status === "string" ? row.ui_status : null);
+  const stage = normalizeUIStatus(typeof row.stage === "string" ? row.stage : row.ui_status as string | null);
   return {
     ...(row as ManualDeal),
+    stage,
+    ui_status: uiStatus,
     profit_cad: toNumber(row.profit_cad as number | string | null | undefined),
     price: toNumber(row.price as number | string | null | undefined),
     profit_margin: toNumber(row.profit_margin as number | string | null | undefined),

@@ -287,6 +287,10 @@ export type UIStatus =
 
 export type Stage = UIStatus;
 
+const UI_STATUS_ALIASES = {
+  "follow-up": "follow_up",
+} as const satisfies Record<string, UIStatus>;
+
 type DealProfitSnapshot = {
   ui_status: UIStatus;
   price?: number | null;
@@ -317,6 +321,30 @@ export const UI_STATUS_LABELS: Record<UIStatus, string> = {
   bad_spec: "Bad Spec/Damage",
   other: "Other",
 };
+
+export function normalizeUIStatus(status: string | null | undefined): UIStatus {
+  const value = status?.trim();
+  if (!value) return "found";
+
+  if (value in UI_STATUS_ALIASES) {
+    return UI_STATUS_ALIASES[value as keyof typeof UI_STATUS_ALIASES];
+  }
+
+  switch (value) {
+    case "found":
+    case "follow_up":
+    case "approved":
+    case "bought":
+    case "no_deal":
+    case "dealer_didnt_negotiate":
+    case "already_sold":
+    case "bad_spec":
+    case "other":
+      return value;
+    default:
+      return "found";
+  }
+}
 
 export function isApprovedStageStatus(status: UIStatus) {
   return (

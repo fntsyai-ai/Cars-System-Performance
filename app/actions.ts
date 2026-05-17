@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import type { UIStatus } from "@/lib/utils";
+import { normalizeUIStatus, type UIStatus } from "@/lib/utils";
 
 export async function createDeal(input: {
   listing_id?: number | null;
@@ -20,9 +20,11 @@ export async function createDeal(input: {
   mmr_link?: string | null;
 }) {
   const supabase = await createClient();
+  const stage = normalizeUIStatus(input.stage);
   const payload = {
     ...input,
-    ui_status: input.ui_status ?? input.stage,
+    stage,
+    ui_status: normalizeUIStatus(input.ui_status ?? stage),
   };
   const { data, error } = await supabase
     .from("manual_deals")
@@ -52,10 +54,10 @@ export async function updateDeal(id: string, patch: Partial<{
   mmr_link: string | null;
 }>) {
   const supabase = await createClient();
+  const normalizedStatus = patch.ui_status ? normalizeUIStatus(patch.ui_status) : patch.stage ? normalizeUIStatus(patch.stage) : null;
   const payload = {
     ...patch,
-    ...(patch.ui_status ? { stage: patch.ui_status } : {}),
-    ...(patch.stage ? { ui_status: patch.stage } : {}),
+    ...(normalizedStatus ? { stage: normalizedStatus, ui_status: normalizedStatus } : {}),
   };
   const { error } = await supabase.from("manual_deals").update(payload).eq("id", id);
   if (error) return { error: error.message };
@@ -77,9 +79,10 @@ export async function deleteDeal(id: string) {
 
 export async function updateDealUiStatus(dealId: string, uiStatus: UIStatus) {
   const supabase = await createClient();
+  const normalizedStatus = normalizeUIStatus(uiStatus);
   const { error } = await supabase
     .from("manual_deals")
-    .update({ ui_status: uiStatus, stage: uiStatus })
+    .update({ ui_status: normalizedStatus, stage: normalizedStatus })
     .eq("id", dealId);
 
   if (error) return { error: error.message };
