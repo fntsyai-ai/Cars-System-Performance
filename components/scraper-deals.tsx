@@ -24,6 +24,7 @@ type FilterState = {
 
 const STATUS_OPTIONS: UIStatus[] = [
   "found",
+  "follow_up",
   "approved",
   "bought",
   "no_deal",

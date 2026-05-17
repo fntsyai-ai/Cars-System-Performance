@@ -276,6 +276,7 @@ export const CANADIAN_PROVINCES = [
 
 export type UIStatus =
   | "found"
+  | "follow_up"
   | "approved"
   | "bought"
   | "no_deal"
@@ -295,6 +296,7 @@ type DealProfitSnapshot = {
 
 export const STAGE_LABELS: Record<Stage, string> = {
   found: "Found",
+  follow_up: "Follow-Up",
   approved: "Approved",
   bought: "Bought",
   no_deal: "Bad Dealer",
@@ -306,6 +308,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
 
 export const UI_STATUS_LABELS: Record<UIStatus, string> = {
   found: "Found",
+  follow_up: "Follow-Up",
   approved: "Approved",
   bought: "Bought",
   no_deal: "Bad Dealer",

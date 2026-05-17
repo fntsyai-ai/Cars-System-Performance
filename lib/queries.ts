@@ -206,7 +206,8 @@ function sortUnifiedDeals(deals: UnifiedDeal[]) {
     already_sold: 4,
     bad_spec: 5,
     other: 6,
-    found: 7,
+    follow_up: 7,
+    found: 8,
   };
 
   return deals.sort((a, b) => {
