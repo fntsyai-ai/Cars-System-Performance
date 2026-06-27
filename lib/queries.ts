@@ -70,6 +70,44 @@ function toNumber(value: number | string | null | undefined): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+// Supabase / PostgREST caps every response at `db-max-rows` (1000 on this
+// project) and that cap CANNOT be raised with `.limit()`. A plain
+// `.select("*")` therefore silently returns an arbitrary 1000-row slice once
+// the table grows past it — and with no `ORDER BY` the slice changes between
+// requests. That broke the dashboard (under-counted "Bought") and made the
+// YTD figure wobble on refresh. This helper pages through the full result set
+// with a deterministic ordering so callers always see every matching row.
+const SUPABASE_PAGE_SIZE = 1000;
+
+async function fetchManualDealsInRange(
+  startInclusive: string | null,
+  endInclusive: string | null,
+): Promise<ManualDeal[]> {
+  const supabase = await createClient();
+  const rows: ManualDeal[] = [];
+
+  for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+    let filter = supabase.from("manual_deals").select("*");
+    if (startInclusive) filter = filter.gte("deal_date", startInclusive);
+    if (endInclusive) filter = filter.lte("deal_date", endInclusive);
+
+    const { data, error } = await filter
+      // Stable, fully-deterministic ordering (deal_date can tie, so break ties
+      // on the primary key) keeps pagination consistent across pages.
+      .order("deal_date", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, from + SUPABASE_PAGE_SIZE - 1);
+
+    if (error) throw error;
+
+    const page = data ?? [];
+    for (const row of page) rows.push(normalizeDeal(row as Record<string, unknown>));
+    if (page.length < SUPABASE_PAGE_SIZE) break;
+  }
+
+  return rows;
+}
+
 function normalizeDeal(row: Record<string, unknown>): ManualDeal {
   const uiStatus = normalizeUIStatus(typeof row.ui_status === "string" ? row.ui_status : null);
   const stage = normalizeUIStatus(typeof row.stage === "string" ? row.stage : row.ui_status as string | null);
@@ -84,19 +122,12 @@ function normalizeDeal(row: Record<string, unknown>): ManualDeal {
 }
 
 async function getDashboardBundle(month: MonthRef): Promise<DashboardBundle> {
-  const supabase = await createClient();
   const months = Array.from({ length: 12 }, (_, index) => shiftMonth(month, index - 11));
   const earliestMonth = months[0];
   const monthStart = getMonthDateRange(earliestMonth).start;
   const ytdStart = getYearStartDate(month);
 
-  const { data } = await supabase
-    .from("manual_deals")
-    .select("*")
-    .gte("deal_date", monthStart)
-    .lte("deal_date", getMonthDateRange(month).end);
-
-  const manualDeals = (data ?? []).map((row) => normalizeDeal(row as Record<string, unknown>));
+  const manualDeals = await fetchManualDealsInRange(monthStart, getMonthDateRange(month).end);
 
   const monthlyDeals = new Map<string, ManualDeal[]>();
   for (const deal of manualDeals) {
@@ -170,15 +201,8 @@ export async function getYtdProfit(refDate: MonthRef) {
 }
 
 export async function getDealsForMonth(month: MonthRef): Promise<ManualDeal[]> {
-  const supabase = await createClient();
   const { start, end } = getMonthDateRange(month);
-  const { data } = await supabase
-    .from("manual_deals")
-    .select("*")
-    .gte("deal_date", start)
-    .lte("deal_date", end)
-    .order("deal_date", { ascending: false });
-  return (data ?? []).map((row) => normalizeDeal(row as Record<string, unknown>));
+  return fetchManualDealsInRange(start, end);
 }
 
 export async function getDealsForDay(day: DayRef): Promise<ManualDeal[]> {
@@ -226,12 +250,7 @@ function sortUnifiedDeals(deals: UnifiedDeal[]) {
 }
 
 export async function getAllDeals(): Promise<ManualDeal[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("manual_deals")
-    .select("*")
-    .order("deal_date", { ascending: false });
-  return (data ?? []).map((row) => normalizeDeal(row as Record<string, unknown>));
+  return fetchManualDealsInRange(null, null);
 }
 
 export async function getAnalyticsByMake() {
