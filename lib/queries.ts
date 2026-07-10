@@ -5,9 +5,7 @@ import {
   formatMonthShortLabel,
   getMonthDateRange,
   getRealizedDealProfit,
-  getYearStartDate,
   isApprovedStageStatus,
-  isBoughtDealAwaitingPayment,
   normalizeUIStatus,
   shiftMonth,
   type DayRef,
@@ -121,67 +119,100 @@ function normalizeDeal(row: Record<string, unknown>): ManualDeal {
   };
 }
 
+// One aggregated row per month, as returned by the dashboard_monthly_metrics
+// Postgres function (see supabase/migrations/012_dashboard_metrics.sql).
+type MonthlyMetricsRow = {
+  month: string; // "YYYY-MM"
+  found: number;
+  approved: number;
+  bought: number;
+  unpaid_bought: number;
+  realized_count: number;
+  realized_profit: number | string;
+};
+
+const EMPTY_METRICS = {
+  found: 0,
+  approved: 0,
+  bought: 0,
+  unpaid_bought: 0,
+  realized_count: 0,
+  realized_profit: 0,
+} as const;
+
 async function getDashboardBundle(month: MonthRef): Promise<DashboardBundle> {
   const months = Array.from({ length: 12 }, (_, index) => shiftMonth(month, index - 11));
   const earliestMonth = months[0];
   const monthStart = getMonthDateRange(earliestMonth).start;
-  const ytdStart = getYearStartDate(month);
+  const monthEnd = getMonthDateRange(month).end;
 
-  const manualDeals = await fetchManualDealsInRange(monthStart, getMonthDateRange(month).end);
+  // Aggregate in Postgres — a single call returns ~12 rows instead of pulling
+  // the whole table into the server. This also makes the result deterministic
+  // (no row cap, no ordering ambiguity) by construction.
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("dashboard_monthly_metrics", {
+    start_month: monthStart,
+    end_month: monthEnd,
+  });
+  if (error) throw error;
 
-  const monthlyDeals = new Map<string, ManualDeal[]>();
-  for (const deal of manualDeals) {
-    const key = deal.deal_date.slice(0, 7);
-    const existing = monthlyDeals.get(key);
-    if (existing) existing.push(deal);
-    else monthlyDeals.set(key, [deal]);
+  const byMonth = new Map<string, MonthlyMetricsRow>();
+  for (const row of (data ?? []) as MonthlyMetricsRow[]) {
+    byMonth.set(row.month, row);
   }
+
+  const metricsFor = (key: string) => {
+    const row = byMonth.get(key);
+    if (!row) return EMPTY_METRICS;
+    return {
+      found: row.found,
+      approved: row.approved,
+      bought: row.bought,
+      unpaid_bought: row.unpaid_bought,
+      realized_count: row.realized_count,
+      realized_profit: Number(row.realized_profit) || 0,
+    };
+  };
 
   const trend = months.map((monthRef) => {
     const key = formatMonthParam(monthRef);
-    const deals = monthlyDeals.get(key) ?? [];
-    const found = deals.length;
-    const approved = deals.filter((deal) => isApprovedStageStatus(deal.ui_status)).length;
-    const bought = deals.filter((deal) => deal.ui_status === "bought").length;
-    const profits = deals.map(getRealizedDealProfit).filter((profit): profit is number => profit != null);
-
+    const m = metricsFor(key);
     return {
       month: key,
       label: formatMonthShortLabel(monthRef),
-      profit: profits.reduce((sum, profit) => sum + profit, 0),
-      bought,
-      approved,
-      found,
+      profit: m.realized_profit,
+      bought: m.bought,
+      approved: m.approved,
+      found: m.found,
     };
   });
 
   const currentKey = formatMonthParam(month);
-  const currentDeals = monthlyDeals.get(currentKey) ?? [];
-  const currentProfits = currentDeals.map(getRealizedDealProfit).filter((profit): profit is number => profit != null);
-  const approved = currentDeals.filter((deal) => isApprovedStageStatus(deal.ui_status)).length;
-  const boughtDeals = currentDeals.filter((deal) => deal.ui_status === "bought");
-  const bought = boughtDeals.length;
-  const unpaidBought = boughtDeals.filter(isBoughtDealAwaitingPayment).length;
-  const totalProfit = currentProfits.reduce((sum, profit) => sum + profit, 0);
-  const ytd = manualDeals
-    .filter((deal) => deal.deal_date >= ytdStart && deal.ui_status === "bought")
-    .reduce((sum, deal) => sum + (getRealizedDealProfit(deal) ?? 0), 0);
+  const current = metricsFor(currentKey);
+  const totalProfit = current.realized_profit;
+
+  // YTD is the sum of realized profit across this calendar year. The trailing
+  // 12-month window always contains January→current month, so YTD is a slice
+  // of the very same monthly rows the trend uses — they can never disagree.
+  const ytd = trend
+    .filter((row) => row.month.startsWith(`${month.year}-`))
+    .reduce((sum, row) => sum + row.profit, 0);
 
   return {
     summary: {
       month: currentKey,
       // Every manual_deals row originates from a telegram-sent listing, so the
       // row count IS the telegram-found count for the period.
-      telegramFound: currentDeals.length,
-      dealLogFound: currentDeals.length,
-      approved,
-      bought,
-      unpaidBought,
-      realizedBought: currentProfits.length,
+      telegramFound: current.found,
+      dealLogFound: current.found,
+      approved: current.approved,
+      bought: current.bought,
+      unpaidBought: current.unpaid_bought,
+      realizedBought: current.realized_count,
       totalProfit,
-      avgProfit: currentProfits.length ? totalProfit / currentProfits.length : null,
-      foundToApproved: currentDeals.length ? (approved / currentDeals.length) * 100 : null,
-      approvedToBought: approved ? (bought / approved) * 100 : null,
+      avgProfit: current.realized_count ? totalProfit / current.realized_count : null,
+      foundToApproved: current.found ? (current.approved / current.found) * 100 : null,
+      approvedToBought: current.approved ? (current.bought / current.approved) * 100 : null,
     },
     trend,
     ytd,
